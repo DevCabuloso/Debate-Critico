@@ -1,0 +1,1350 @@
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 1
+PLATAFORMA DE
+ANÁLISE CRÍTICA
+DE DEBATES
+Especificação funcional, técnica e planejamento de desenvolvimento
+Versão 1.1 (revisada e ampliada) - 09 de novembro de 2026
+Idioma: Português (Brasil)
+O que mudou em relação à v1.0. Esta versão incorpora uma análise crítica do documento original: corrige
+inconsistências de modelagem e de API, fecha lacunas de segurança, privacidade (LGPD) e direitos de conteúdo,
+refina a metodologia de comparação e propõe valores padrão para as decisões que estavam em aberto. Itens novos
+ou alterados estão marcados com [v1.1]. Valores padrão propostos aguardam confirmação (ver Seção 17).
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 2
+Sumário
+  A. Parecer da análise e melhorias aplicadas [v1.1]
+ 1. Resumo executivo e decisões do produto
+ 2. Objetivos, escopo e princípios
+ 3. Jornada do usuário e ciclo de aprendizagem
+ 4. Perfis e permissões
+ 5. Requisitos funcionais por módulo
+ 6. Inteligência artificial e pipeline de processamento
+ 7. Arquitetura técnica
+ 8. Modelo de dados e relacionamentos
+ 9. API REST proposta
+ 10. Segurança, privacidade e integridade
+ 11. Relatórios e metodologia de comparação
+ 12. Estrutura de pastas
+ 13. Infraestrutura e implantação
+ 14. Roadmap e estimativas
+ 15. Critérios de aceite
+ 16. Riscos e recomendações
+ 17. Decisões em aberto e valores padrão propostos [v1.1]
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 3
+A. Parecer da análise e melhorias aplicadas
+Avaliação geral. A v1.0 é um documento sólido: define com clareza o público, o ciclo pedagógico, a separação
+entre API e workers, a revisão humana obrigatória da IA e o cuidado de não expor o gabarito. A distinção entre
+falácia, afirmação falsa, desinformação e mentira é um diferencial conceitual importante e foi mantida
+integralmente. As melhorias abaixo tratam de pontos que poderiam gerar retrabalho, falhas de segurança ou
+questionamento jurídico/metodológico durante a implementação.
+A.1. Achados e correções
+#
+Área
+Achado na v1.0
+Correção na v1.1
+1
+Transcrição
+O fluxo depende de obter transcrição/áudio de
+vídeos do YouTube, mas a obtenção de
+legendas por API em geral exige ser o dono do
+canal, e extrair áudio de terceiros fere os
+termos da plataforma.
+Caminho principal passa a ser a entrada
+administrativa de transcrição autorizada
+(SRT/VTT/TXT) com declaração de direitos. Legendas
+via API e ASR de áudio ficam como caminhos
+opcionais condicionados à autorização (Seções 6.5 e
+17).
+2
+Autenticação
+Endpoints /auth/register e /auth/login no
+Express duplicam o que o Supabase Auth já faz
+e criam ambiguidade sobre quem emite o
+token.
+Frontend usa supabase-js para
+cadastro/login/recuperação; o Express apenas valida o
+JWT (Seção 7.3). Mantidos no backend: /auth/me,
+exclusão e exportação de dados.
+3
+Gabarito
+Campo is_correct na tabela de alternativas e
+uma 'view' sem o campo ainda dependem de
+disciplina de implementação.
+Gabarito em tabela separada (question_answer_keys)
+sem nenhuma policy para o papel USER;
+alternativas nunca contêm o campo (Seção 8).
+4
+Versionamento
+UNIQUE(quiz_id, version) é logicamente
+incorreto (quiz_id já é único por versão).
+UNIQUE(video_id, version); ciclo trava o quiz_id
+aplicado na criação e nunca migra de versão no meio
+do caminho.
+5
+Embaralhamen
+to
+Não há onde persistir a ordem sorteada; sem
+isso é impossível retomar, auditar ou
+reconstruir uma tentativa.
+Tabela attempt_question_order guarda a ordem de
+perguntas e alternativas de cada tentativa; retomada
+preserva a ordem.
+6
+Entrega do
+quiz
+GET /videos/:id/quiz não está ligado a ciclo
+nem a tentativa, permitindo obter perguntas
+fora da etapa correta.
+Perguntas são entregues apenas em POST
+/cycles/:id/attempts, após validação do estado do ciclo.
+7
+Feedback da
+avaliação
+inicial
+Não está definido se o usuário vê
+acertos/explicações após a avaliação inicial.
+Mostrar o gabarito antes da final contamina a
+comparação, pois o instrumento é idêntico.
+Após a inicial: apenas pontuação geral e desempenho
+por categoria. Gabarito e explicações só após concluir
+a avaliação final (padrão proposto, Seção 17).
+8
+Critério de
+visualização
+Ficou em aberto; sem ele o progresso é
+decorativo.
+Proposta: 90% de segundos únicos assistidos,
+heartbeat a cada 10 s, velocidade de até 2x, saltos
+para frente não contam, validação de plausibilidade no
+backend (Seção 5.2).
+9
+Fila de jobs
+Fila em PostgreSQL sem definição de
+concorrência, lease ou recuperação de travas.
+Uso de SELECT ... FOR UPDATE SKIP LOCKED,
+lease com heartbeat, retomada por etapa, chave de
+idempotência e teto de custo (Seção 6.6).
+10
+Segurança da
+IA
+Transcrição é texto não confiável e pode conter
+instruções que manipulem o modelo (prompt
+injection).
+Transcrição tratada como dado; saída apenas em
+schema estruturado validado; sem ferramentas/ações
+pelo modelo; revisão humana obrigatória (Seção 6.3).
+11
+Neutralidade e
+risco
+reputacional
+Debates frequentemente envolvem pessoas
+reais e temas políticos; rotular falácias a
+participantes nomeados pode gerar
+contestação ou ação de difamação.
+Política editorial: a análise descreve trechos e
+argumentos, não o caráter da pessoa; cobertura
+equilibrada entre participantes; aviso de uso
+educacional; canal de contestação (Seção 6.7).
+12
+LGPD e
+menores
+Cadastro público sem verificação de idade;
+LGPD exige tratamento específico para
+crianças e adolescentes.
+Declaração de idade mínima, registro de
+consentimentos/versões de política, fluxo de exclusão
+com anonimização, encarregado (DPO) designado,
+RIPD recomendado (Seção 10).
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 4
+#
+Área
+Achado na v1.0
+Correção na v1.1
+13
+Métricas
+Variação em pontos percentuais ignora o efeito
+teto (quem começa com 90% tem pouco a
+melhorar) e apenas ciclos concluídos geram
+resultado (viés de sobrevivência).
+Inclusão de ganho normalizado, taxa de abandono
+por etapa e exibição de agregados somente com n
+mínimo (Seção 11).
+14
+API incompleta
+Faltam endpoints para ciclos, eventos de vídeo,
+edição de questões, upload de transcrição,
+retry de jobs, categorias, usuários e direitos
+LGPD.
+Seção 9 ampliada com todos os endpoints necessários
+e padrões de erro, paginação e idempotência.
+15
+Modelo de
+dados
+Ausência de estado do ciclo, número do ciclo,
+eventos de vídeo, consentimentos,
+origem/direitos da transcrição e custo de IA.
+Seção 8 revisada com novas tabelas e colunas,
+constraints e índices.
+16
+Estimativa
+6 a 9 semanas para o escopo completo
+(incluindo IA, testes, segurança e LGPD) é
+otimista para uma pessoa.
+Nova estimativa: MVP sem IA em 7-8 semanas;
+produto completo em 11-14 semanas, em marcos
+entregáveis (Seção 14).
+17
+Qualidade da
+IA
+Não há método para medir a qualidade das
+análises ao longo do tempo.
+Conjunto de referência (golden set), métricas de
+aceitação/rejeição por questão, motivos de rejeição
+registrados e versionamento de prompts (Seção 6.8).
+18
+Acessibilidade
+e UX
+Não mencionadas; público geral inclui pessoas
+com deficiência.
+Requisito WCAG 2.1 AA, legendas, navegação por
+teclado, layout responsivo (Seção 5.7).
+19
+Administrador
+único
+Ponto único de falha operacional e de
+segurança.
+Mantido o admin único, com MFA, procedimento
+documentado de recuperação (break-glass) e modelo
+de papéis extensível (Seção 4.1).
+20
+Testes
+Recomendados de forma genérica.
+Estratégia explícita: unitários, integração, testes de
+RLS, contrato da API e E2E (Seção 13.3).
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 5
+1. Resumo executivo e decisões do produto
+A plataforma desenvolve a capacidade de analisar criticamente debates, identificar falácias lógicas, reconhecer
+estratégias retóricas, avaliar afirmações factuais e perceber contradições. A metodologia compara o
+desempenho do participante antes e depois de uma trilha educacional relacionada ao debate assistido. O
+diferencial é combinar conteúdo audiovisual real, avaliação diagnóstica, capacitação e avaliação final,
+registrando a evolução de cada participante.
+Decisão
+Definição estabelecida
+Público
+Qualquer pessoa pode criar conta publicamente (com declaração de idade mínima e
+consentimento [v1.1]).
+Autenticação
+E-mail e senha com Supabase Auth, usada diretamente pelo frontend; o backend valida o JWT
+[v1.1].
+Administração
+Um único administrador principal, criado por procedimento seguro, com MFA.
+Aulas
+Conteúdo criado e gerenciado manualmente pelo administrador.
+Vídeos
+Links do YouTube reproduzidos na plataforma por player incorporado (apenas vídeos com
+incorporação permitida).
+Transcrição [v1.1]
+Entrada administrativa de transcrição autorizada como caminho principal; legendas via API e ASR
+como alternativas condicionadas a autorização.
+Questionários
+Gerados pela IA e obrigatoriamente revisados e aprovados pelo administrador; versão aprovada é
+imutável.
+Avaliação inicial/final
+Mesmo conjunto de perguntas e alternativas; ordem de perguntas e alternativas aleatorizada por
+tentativa e persistida.
+Feedback [v1.1]
+Após a inicial: pontuação e desempenho por categoria. Gabarito e explicações apenas após a
+avaliação final.
+Processamento da IA
+Iniciado automaticamente após cadastro do vídeo e solicitação de processamento/publicação.
+Escopo
+Aplicação completa, com arquitetura preparada para produção, entregue em marcos (MVP e
+versão completa) [v1.1].
+1.1. Premissa central
+A IA atua como ferramenta de apoio à análise e à elaboração de avaliações. Ela não é árbitro definitivo da
+verdade. A classificação de falácias apresenta contexto, justificativa e grau de confiança, e o administrador
+mantém a decisão editorial final.
+Distinção conceitual obrigatória: falácia é uma falha ou fragilidade argumentativa; afirmação falsa é uma questão
+factual; desinformação pode envolver informação falsa ou enganosa; mentira pressupõe intenção de enganar, que
+normalmente não pode ser comprovada apenas pela transcrição.
+2. Objetivos, escopo e princípios
+2.1. Objetivo geral
+Construir uma plataforma educacional que permita ao público geral desenvolver e avaliar habilidades de
+pensamento crítico por meio da análise orientada de debates reais.
+2.2. Objetivos específicos
+  Disponibilizar debates em vídeo incorporados à aplicação.
+ Aplicar avaliação diagnóstica antes das aulas.
+ Oferecer aulas organizadas em módulos, administradas manualmente.
+ Solicitar à IA análise argumentativa e elaboração de questionários a partir de transcrição autorizada.
+ Submeter todo questionário gerado à revisão e aprovação humana.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 6
+ Aplicar avaliação final equivalente à inicial, com ordem aleatória.
+ Comparar resultados individuais e apresentar indicadores agregados à administração.
+2.3. Dentro do escopo
+  Cadastro público, login, recuperação de senha, perfil, consentimentos e exclusão de conta.
+ Painel administrativo com gerenciamento de vídeos, transcrições, aulas, usuários, processamento e
+avaliações.
+ Player do YouTube incorporado, sujeito às permissões do vídeo e às regras da plataforma.
+ Pipeline assíncrono de análise e geração de questões.
+ Trilha de aprendizagem e controle de conclusão.
+ Relatórios individuais e administrativos.
+ Auditoria, versionamento, segurança, observabilidade e acessibilidade [v1.1].
+2.4. Fora do escopo inicial
+  Rede social, comentários públicos ou fóruns.
+ Aplicativo móvel nativo.
+ Correção de redações livres por IA.
+ Verificação automática e conclusiva de intenção de mentira.
+ Publicação automática de avaliações sem aprovação humana.
+ Download, armazenamento ou redistribuição de vídeos de terceiros [v1.1].
+3. Jornada do usuário e ciclo de aprendizagem
+O ciclo é controlado pelo backend. O frontend apresenta as etapas, mas não decide sozinho se uma etapa foi
+concluída.
+Etapa
+Ação do usuário
+Regra do sistema
+1. Cadastro
+Cria conta, aceita termos e confirma o
+e-mail.
+Cria perfil com papel USER e registra consentimento.
+2. Seleção
+Escolhe um debate publicado.
+Cria ou recupera o ciclo e trava a versão aprovada do
+questionário.
+3. Primeira
+visualização
+Assiste ao debate.
+Registra eventos e valida o critério de conclusão.
+4. Avaliação inicial
+Responde ao questionário.
+Persiste ordem sorteada, respostas, versão e pontuação
+inicial.
+5. Aulas
+Conclui os conteúdos obrigatórios.
+Registra conclusão por aula e módulo.
+6. Segunda
+visualização
+Reassiste ao mesmo debate.
+Registra a segunda etapa de visualização com o mesmo
+critério.
+7. Avaliação final
+Responde novamente às questões.
+Mesmo questionário, nova ordem aleatória.
+8. Relatório
+Consulta a evolução.
+Compara resultados do mesmo ciclo; libera gabarito e
+explicações.
+3.1. Máquina de estados do ciclo [v1.1]
+Estado
+Condição de entrada
+Próximo estado
+NOT_STARTED
+Ciclo criado.
+INITIAL_VIDEO
+INITIAL_VIDEO
+Usuário abriu o debate.
+INITIAL_QUIZ quando o critério de visualização for
+atendido.
+INITIAL_QUIZ
+Critério de primeira visualização atendido.
+LEARNING após envio da tentativa inicial.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 7
+Estado
+Condição de entrada
+Próximo estado
+LEARNING
+Tentativa inicial enviada.
+FINAL_VIDEO quando todas as aulas obrigatórias
+estiverem concluídas.
+FINAL_VIDEO
+Aulas obrigatórias concluídas.
+FINAL_QUIZ quando a segunda visualização for
+concluída.
+FINAL_QUIZ
+Segunda visualização concluída.
+COMPLETED após envio da tentativa final.
+COMPLETED
+Tentativa final enviada.
+Terminal.
+ABANDONED
+Inatividade acima do limite configurado (padrão:
+90 dias).
+Terminal; usuário pode abrir novo ciclo.
+BLOCKED
+Ação administrativa (ex.: questionário
+arquivado por erro).
+Retorna ao estado anterior ou ABANDONED.
+Toda transição é executada em transação no backend, com registro de data e de motivo. Transições inválidas
+retornam erro 409.
+3.2. Regras de conclusão
+  A avaliação inicial só é liberada após o critério de primeira visualização.
+ A trilha indica quais aulas são obrigatórias para o ciclo (globais e por categoria do debate).
+ A avaliação final só é liberada após a conclusão das aulas e da segunda visualização.
+ Cada ciclo tem no máximo uma tentativa inicial e uma final.
+ Tentativa enviada não pode ser editada. Tentativa iniciada e não enviada pode ser retomada com a mesma
+ordem [v1.1].
+ Novos ciclos não sobrescrevem resultados anteriores; cada ciclo tem cycle_number e é identificado como
+repetição nos relatórios [v1.1].
+ O ciclo permanece vinculado à versão do questionário travada na criação, mesmo que nova versão seja
+aprovada depois [v1.1].
+Limite do player: o progresso informado pelo navegador não é prova inviolável de atenção. O sistema registra
+eventos e tempo reproduzido, mas não garante que a pessoa assistiu ou compreendeu o conteúdo. O critério
+operacional de conclusão deve ser documentado e exibido ao usuário de forma transparente.
+4. Perfis e permissões
+Perfil
+Permissões
+USER
+Gerenciar o próprio perfil; visualizar debates publicados; iniciar ciclos; assistir vídeos; responder avaliações;
+concluir aulas; consultar somente seus relatórios; exportar e excluir seus dados.
+ADMIN
+Gerenciar vídeos, transcrições, aulas, categorias, usuários e configurações; acompanhar tarefas da IA;
+revisar análises; editar e aprovar/reprovar questionários; consultar relatórios agregados e registros de
+auditoria.
+4.1. Administração única
+A aplicação tem um administrador principal, provisionado por script seguro, console ou procedimento
+operacional protegido. Não existe endpoint público para promoção de usuários a ADMIN. [v1.1] MFA é
+obrigatório para a conta administrativa; deve existir procedimento documentado e testado de recuperação
+(break-glass) com segundo responsável técnico guardando credenciais de emergência. O campo role aceita
+novos valores no futuro (ex.: REVIEWER) sem alteração estrutural.
+4.2. Autorização
+Permissões são verificadas no backend e reforçadas por políticas RLS no Supabase. Ocultar menus no
+frontend não é mecanismo de segurança. Acesso administrativo a dados individuais de avaliação é restrito a
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 8
+finalidade de suporte e sempre registrado em audit_logs [v1.1].
+5. Requisitos funcionais por módulo
+5.1. Autenticação e perfil
+  Cadastro com nome, e-mail, senha, confirmação de idade mínima e aceite dos termos/política de
+privacidade [v1.1].
+ Confirmação de e-mail e recuperação de senha (via Supabase Auth).
+ Login, logout e persistência segura da sessão; renovação de token.
+ Proteção de rotas no frontend e validação de JWT no backend.
+ Consulta e atualização dos dados básicos do perfil.
+ Exportação dos dados do titular e solicitação de exclusão da conta, com anonimização dos resultados
+agregados [v1.1].
+5.2. Vídeos e debates
+  Cadastrar título, descrição, URL, ID do YouTube, categorias, participantes, data, capa, duração, idioma,
+origem dos direitos e status.
+ Validar formato do link e disponibilidade de incorporação (YouTube Data API: status.embeddable) [v1.1].
+ Exibir vídeo por YouTube IFrame Player API, sem ocultar controles, anúncios ou identificação exigidos
+pelas políticas do YouTube.
+ Permitir edição, arquivamento e publicação pelo administrador (exclusão lógica).
+ Não baixar nem armazenar vídeos de terceiros sem autorização.
+Critério de conclusão de visualização [v1.1] (padrão proposto):
+  O cliente envia eventos (play, pause, seek, ended, heartbeat a cada 10 s) com posição e timestamp.
+ O backend consolida intervalos de segundos únicos efetivamente reproduzidos; saltos para frente não
+contam.
+ Conclusão = 90% dos segundos únicos da duração, com velocidade de reprodução até 2x.
+ Plausibilidade: tempo reproduzido não pode exceder o tempo real decorrido multiplicado pela velocidade;
+eventos suspeitos são marcados para análise.
+ A conclusão é calculada pelo backend e registrada em video_progress; o frontend apenas exibe o resultado.
+5.3. Questionários
+  Questões de múltipla escolha com enunciado, alternativas, explicação, categoria, dificuldade e referência
+temporal.
+ Questionário gerado pela IA fica em revisão até aprovação explícita.
+ Inicial e final usam a mesma versão aprovada.
+ Embaralhar perguntas e alternativas por tentativa, mantendo IDs estáveis; ordem persistida em
+attempt_question_order [v1.1].
+ Enviar respostas por identificador de alternativa, nunca por índice visual.
+ Não entregar gabarito nem explicação antes do envio; após a inicial, entregar apenas pontuação e
+desempenho por categoria [v1.1].
+ Envio idempotente (idempotency key); reenvio do mesmo payload retorna o mesmo resultado [v1.1].
+ Registrar horário de início, envio, duração e versão aplicada.
+ Interface de revisão do administrador: editar enunciado/alternativas, ver trecho-evidência com link para o
+minuto do vídeo, aprovar, reprovar (com motivo) ou solicitar nova geração [v1.1].
+5.4. Aulas
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 9
+ Criar módulos e aulas manualmente pelo administrador.
+ Campos: título, descrição, conteúdo, vídeo opcional, materiais, categoria, ordem e status.
+ Rascunho e publicação; aula publicada que foi usada em ciclos é versionada, não sobrescrita [v1.1].
+ Definir aulas obrigatórias globalmente, por categoria ou por debate (tabela required_lessons) [v1.1].
+ Registrar conclusão individual por usuário e ciclo.
+5.5. Relatórios
+  Relatório individual por debate e ciclo.
+ Pontuação inicial e final, acertos, erros, variação em pontos percentuais e ganho normalizado [v1.1].
+ Desempenho por categoria e histórico de ciclos.
+ Painel administrativo com usuários, debates, ciclos concluídos, abandono por etapa e médias agregadas.
+ Não expor respostas individuais publicamente; agregados exibidos apenas com n mínimo (padrão: 5) [v1.1].
+5.6. Administração e auditoria
+  Dashboard administrativo.
+ Gerenciamento de vídeos, transcrições, aulas, usuários, questionários e categorias.
+ Acompanhamento de jobs, custos estimados e falhas, com ações de retry e cancelamento [v1.1].
+ Registro de aprovação, reprovação e edição de questões, incluindo diferenças e motivos.
+ Logs de ações administrativas com ator, ação, entidade, data e metadados.
+5.7. Requisitos não funcionais de experiência [v1.1]
+  Acessibilidade WCAG 2.1 nível AA: navegação por teclado, contraste, rótulos e foco visível.
+ Layout responsivo (mobile first); aplicação em português do Brasil, com textos externalizados para futura
+internacionalização.
+ Desempenho: páginas principais com carregamento inicial inferior a 3 s em conexão 4G típica.
+ Banner/gestão de cookies caso sejam usados cookies não essenciais ou analytics.
+6. Inteligência artificial e pipeline de processamento
+6.1. Sequência de processamento
+Fase
+Descrição
+Resultado esperado
+1. Cadastro
+Administrador cadastra o debate, declara a origem dos
+direitos e solicita processamento.
+Vídeo validado e job criado.
+2. Transcrição
+Entrada administrativa (SRT/VTT/TXT) ou, se autorizado,
+legendas via API ou ASR sobre áudio autorizado.
+Transcrição com segmentos e timestamps,
+origem registrada.
+3. Segmentação
+Dividir o texto em blocos com sobreposição contextual.
+Segmentos processáveis.
+4. Análise
+Identificar argumentos, falácias potenciais, afirmações factuais
+e contradições.
+Análise estruturada com evidências.
+5. Consolidação
+Reunir achados dos segmentos e reduzir duplicações.
+Análise global do debate.
+6. Geração
+Produzir questões, alternativas, gabarito e explicações.
+Questionário em JSON estruturado.
+7. Validação
+Validar schema, número de alternativas, unicidade,
+consistência, presença de evidência e equilíbrio entre
+participantes.
+Questionário tecnicamente válido.
+8. Revisão
+Disponibilizar ao administrador.
+Status PENDING_REVIEW.
+9. Publicação
+Aprovação explícita do administrador.
+Versão aprovada e imutável.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 10
+6.2. Tipos de achados
+  Falácias lógicas: classificação potencial, trecho, contexto e justificativa.
+ Afirmações factuais: proposições verificáveis que exigem fontes externas.
+ Contradições: afirmações incompatíveis atribuídas ao mesmo participante ou ao debate.
+ Estratégias retóricas: apelos emocionais, enquadramento, desvio de assunto e recursos persuasivos.
+ Qualidade argumentativa: relação entre premissas, evidências e conclusão.
+6.3. Regras de análise
+  Não classificar automaticamente uma opinião como falsa ou falaciosa.
+ Não presumir intenção de enganar com base apenas na transcrição.
+ Exigir trecho textual e contexto para cada classificação sugerida.
+ Indicar incerteza e nível de confiança; não apresentar confiança como certeza factual.
+ Separar a análise lógica da verificação factual externa.
+ Evitar perguntas tendenciosas, ambíguas ou que dependam de informação ausente do debate ou do
+material didático.
+ [v1.1] Tratar a transcrição como dado não confiável: delimitar o conteúdo no prompt, instruir o modelo a
+ignorar comandos contidos nele, não conceder ferramentas ou acesso a dados ao modelo e aceitar
+somente saída em schema validado.
+ [v1.1] Evidência obrigatória: cada achado referencia segmento e timestamp; achados sem trecho verificável
+no texto original são descartados automaticamente.
+6.4. Estrutura recomendada de questão
+Campo
+Finalidade
+statement
+Enunciado da pergunta.
+options
+Lista de alternativas com IDs estáveis (sem indicação de correção).
+correct_option_id
+Identificador da alternativa correta, armazenado em question_answer_keys e protegido no
+backend.
+explanation
+Justificativa da resposta (liberada somente após a avaliação final).
+category / difficulty
+Categoria de conhecimento avaliada e nível de dificuldade.
+evidence_excerpt /
+timestamp_seconds
+Trecho do debate que fundamenta a questão e posição aproximada no vídeo.
+source_finding_id [v1.1]
+Referência ao achado da análise que originou a questão.
+review_status
+Estado de revisão editorial (PENDING, APPROVED, REJECTED, EDITED).
+6.5. Transcrição e direitos de uso
+Um link do YouTube, por si só, não garante acesso ao áudio ou à transcrição. [v1.1] Ordem de preferência: (1)
+transcrição fornecida pelo administrador com declaração de que possui licença ou autorização; (2) legendas
+obtidas pela API quando o canal/administrador tem permissão para isso; (3) transcrição automática (ASR) de
+áudio cujo processamento esteja expressamente autorizado. Cada transcrição guarda origem (origin),
+responsável pela declaração e observação de direitos. Sem declaração de direitos, o job não é iniciado. Validar
+termos de serviço do YouTube e direitos autorais antes de processar qualquer conteúdo.
+6.6. Processamento assíncrono
+A análise é executada por workers separados da API HTTP. O backend cria um registro persistente de job; o
+worker busca tarefas pendentes, executa cada etapa, atualiza o status e registra erros. A primeira versão usa
+fila persistida no PostgreSQL; Redis/BullMQ pode ser adotado quando houver necessidade de maior vazão.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 11
+ [v1.1] Aquisição de job com SELECT ... FOR UPDATE SKIP LOCKED para evitar execução duplicada.
+ [v1.1] Lease com heartbeat: job PROCESSING cujo lease expira volta a RETRYING.
+ [v1.1] Cada etapa grava seu resultado (checkpoint), permitindo retomar sem repetir etapas caras.
+ [v1.1] Chave de idempotência por (video_id, tipo, versão do prompt) evita jobs duplicados.
+ [v1.1] Retry com backoff exponencial, máximo de tentativas configurável e limite de custo por vídeo e por
+mês; ao exceder, o job exige aprovação do administrador.
+Status de job
+Significado
+QUEUED
+Aguardando worker.
+PROCESSING
+Em execução.
+RETRYING
+Falha recuperável e nova tentativa programada.
+COMPLETED
+Processamento concluído.
+FAILED
+Falha definitiva ou limite de tentativas atingido.
+CANCELLED
+Cancelado pelo administrador.
+6.7. Política editorial e neutralidade [v1.1]
+  A análise descreve trechos e argumentos; não emite juízo sobre caráter, intenção ou credibilidade geral de
+pessoas.
+ Padrões de falácia são apresentados como 'o trecho apresenta indícios de ...', nunca como afirmação
+categórica.
+ Equilíbrio: o validador sinaliza quando uma participante concentra desproporcionalmente os achados, para
+revisão editorial.
+ Exibir aviso de finalidade educacional e canal de contato para contestação ou correção.
+ Priorizar debates com autorização de uso e evitar a publicação de análises que atribuam condutas ilícitas a
+pessoas identificáveis.
+6.8. Qualidade e melhoria contínua da IA [v1.1]
+  Conjunto de referência (golden set) de trechos com classificação humana, usado para testar cada nova
+versão de prompt/modelo.
+ Métricas: taxa de aprovação de questões sem edição, taxa de rejeição por motivo, concordância com o
+conjunto de referência.
+ Cada geração registra modelo, versão do prompt, versão do schema, parâmetros, tokens e custo.
+ Motivos de rejeição do administrador alimentam a revisão dos prompts.
+7. Arquitetura técnica
+7.1. Stack proposta
+Camada
+Tecnologia
+Responsabilidade
+Frontend
+Vue.js 3 + Vite
+Aplicação web.
+UI
+Vuetify 3
+Componentes, layouts, formulários e tabelas.
+Estado/rotas
+Pinia + Vue Router
+Estado de interface e navegação.
+HTTP/Auth
+fetch/Axios + supabase-js
+API de negócio e autenticação.
+Backend
+Node.js + Express
+Regras de negócio e endpoints REST.
+Validação
+Zod (schemas compartilhados) [v1.1]
+Payloads, respostas de IA e contratos.
+Banco
+Supabase PostgreSQL
+Persistência relacional e RLS.
+Auth
+Supabase Auth
+Cadastro, login, tokens e MFA.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 12
+Camada
+Tecnologia
+Responsabilidade
+Arquivos
+Supabase Storage
+Materiais educacionais e transcrições enviadas.
+IA
+OpenAI API
+Análise e geração estruturada (e transcrição, se
+autorizada).
+Vídeo
+YouTube IFrame Player API
+Player incorporado.
+Gráficos
+Chart.js ou ApexCharts
+Relatórios.
+Testes [v1.1]
+Vitest/Jest, Supertest, Playwright
+Unidade, integração e E2E.
+Observabilidade [v1.1]
+Pino (logs JSON), Sentry
+Logs estruturados e erros.
+7.2. Visão lógica
+Componente
+Comunicação
+Navegador / Vue
+Autentica no Supabase Auth; consome a API de aplicação para operações de negócio; usa o player
+incorporado para vídeo.
+API Express
+Valida JWT, autorização, dados e regras de ciclo; acessa Supabase e serviços externos.
+Supabase
+Dados, autenticação, arquivos e políticas RLS.
+Worker
+Processa jobs persistidos e chama OpenAI.
+OpenAI
+Recebe conteúdo autorizado e retorna análise/JSON estruturado.
+YouTube
+Entrega o player incorporado, respeitando restrições de cada vídeo.
+7.3. Fluxo de autenticação e acesso a dados [v1.1]
+  O frontend realiza cadastro, login, logout e recuperação diretamente com o Supabase Auth e envia o access
+token à API no cabeçalho Authorization.
+ A API valida assinatura e expiração do JWT e carrega o papel do usuário a partir de profiles (não do token
+fornecido pelo cliente).
+ O frontend não acessa tabelas sensíveis diretamente: RLS nega acesso do papel anon/authenticated às
+tabelas de avaliação e gabarito; o acesso ocorre via API.
+ A chave service_role é usada somente pelo backend e pelo worker; RLS permanece como segunda camada
+de defesa.
+7.4. Princípios arquiteturais
+  Separação entre frontend, API, workers e persistência.
+ Regras de negócio no backend, não em componentes Vue.
+ Serviços e repositórios separados para facilitar testes.
+ Jobs idempotentes e retomáveis.
+ Versionamento de questionários e rastreabilidade dos modelos de IA.
+ Segredos apenas no ambiente do servidor.
+8. Modelo de dados e relacionamentos
+Proposta inicial de entidades; tipos, constraints, índices, exclusão lógica e normalização devem ser definidos
+nas migrations. Itens novos/alterados marcados com [v1.1].
+Tabela
+Campos principais / finalidade
+profiles
+id (FK auth.users), name, email, role, status, age_confirmed_at [v1.1], deleted_at [v1.1],
+created_at.
+consents [v1.1]
+id, user_id, document_type, document_version, accepted_at, ip_hash.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 13
+Tabela
+Campos principais / finalidade
+data_requests [v1.1]
+id, user_id, type (EXPORT/DELETE), status, requested_at, completed_at.
+videos
+id, title, description, youtube_url, youtube_id, duration, language, embeddable,
+rights_basis [v1.1], status, deleted_at, created_by.
+video_categories /
+video_category_relations
+id, name, description / video_id, category_id.
+transcriptions
+id, video_id, content, language, status, origin [v1.1], rights_declared_by [v1.1], rights_note
+[v1.1], checksum [v1.1], created_at.
+transcription_segments
+id, transcription_id, start_time, end_time, speaker, text.
+ai_jobs
+id, video_id, job_type, status, step [v1.1], attempts, idempotency_key [v1.1], locked_by,
+lease_expires_at, next_run_at [v1.1], tokens_in/out, cost_estimate [v1.1], error_message,
+started_at, finished_at.
+ai_analyses
+id, video_id, transcription_id, analysis_json, model, prompt_version, schema_version
+[v1.1], created_at.
+fallacies
+id, name, description, examples (catálogo de referência).
+quizzes
+id, video_id, version, status
+(DRAFT/PENDING_REVIEW/APPROVED/REJECTED/ARCHIVED), source_job_id [v1.1],
+approved_by, approved_at. UNIQUE(video_id, version).
+questions
+id, quiz_id, statement, explanation, category, difficulty, evidence_excerpt [v1.1],
+timestamp_seconds, review_status.
+question_options
+id, question_id, text, position_hint. Sem campo de correção [v1.1].
+question_answer_keys [v1.1]
+question_id (PK), correct_option_id. Sem policy para USER; somente backend.
+quiz_review_events [v1.1]
+id, quiz_id, question_id, admin_id, action, diff, reason, created_at.
+lesson_modules / lessons /
+lesson_module_relations
+módulos, aulas e relação ordenada; lessons com version [v1.1] e status.
+required_lessons [v1.1]
+id, lesson_id, scope (GLOBAL/CATEGORY/VIDEO), scope_id, is_required.
+user_cycles
+id, user_id, video_id, quiz_id (travado), cycle_number [v1.1], status, state_updated_at
+[v1.1], started_at, completed_at.
+video_watch_events [v1.1]
+id, cycle_id, stage, event_type, position_seconds, playback_rate, client_ts, server_ts.
+video_progress
+id, cycle_id, stage, unique_seconds_watched [v1.1], completed_at. UNIQUE(cycle_id,
+stage).
+lesson_progress
+id, cycle_id, lesson_id, completed_at. UNIQUE(cycle_id, lesson_id).
+quiz_attempts
+id, cycle_id, quiz_id, attempt_type, status [v1.1], score, idempotency_key [v1.1],
+started_at, submitted_at, duration. UNIQUE(cycle_id, attempt_type).
+attempt_question_order [v1.1]
+attempt_id, question_id, position, option_order (JSON). Guarda a ordem sorteada.
+user_answers
+id, attempt_id, question_id, selected_option_id, is_correct. UNIQUE(attempt_id,
+question_id).
+audit_logs
+id, actor_id, action, entity_type, entity_id, metadata, created_at.
+8.1. Constraints e integridade
+  UNIQUE(cycle_id, attempt_type) para limitar tentativa inicial e final.
+ UNIQUE(video_id, version) para versionamento de questionários [v1.1].
+ Foreign keys entre tentativa, questão e alternativa; selected_option_id deve pertencer à questão (verificado
+por constraint composta ou trigger) [v1.1].
+ Índices para user_id, video_id, status, created_at, cycle_id e chaves de relacionamento.
+ Questionário aprovado não é editado in-place; alterações criam nova versão (trigger bloqueia UPDATE em
+quizzes/questions APPROVED) [v1.1].
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 14
+ Guardar em cada ciclo a versão exata do questionário utilizada.
+ Exclusão lógica em videos, lessons e profiles; exclusão de conta anonimiza dados pessoais e preserva
+resultados agregados [v1.1].
+8.2. Gabarito
+O gabarito reside em question_answer_keys, sem policy de leitura para usuários. O backend calcula o
+resultado ao receber a tentativa. Nunca retornar a entidade completa da questão com o gabarito antes do
+envio; explicações só são entregues após a conclusão da avaliação final.
+9. API REST proposta
+Prefixo: /api/v1. A API retorna erros padronizados (código, mensagem, correlation id), valida payloads com Zod
+e aplica autenticação e autorização por endpoint. Cadastro, login e recuperação são feitos via Supabase Auth
+no cliente [v1.1].
+Método
+Endpoint
+Ação
+GET
+/auth/me
+Usuário autenticado e papel.
+POST
+/me/consents
+Registrar aceite de termos/política [v1.1].
+POST
+/me/data-export
+Solicitar exportação de dados [v1.1].
+DELETE
+/me
+Solicitar exclusão da conta [v1.1].
+GET
+/videos
+Listar debates publicados (paginado, filtros).
+GET
+/videos/:id
+Detalhar debate.
+POST
+/cycles
+Criar ou recuperar ciclo para um debate [v1.1].
+GET
+/cycles/:id
+Estado do ciclo e próximas etapas liberadas [v1.1].
+POST
+/cycles/:id/video-events
+Enviar lote de eventos do player [v1.1].
+GET
+/cycles/:id/video-progress
+Progresso consolidado pelo backend [v1.1].
+POST
+/cycles/:id/attempts
+Iniciar/retomar tentativa; retorna questões
+embaralhadas, sem gabarito.
+POST
+/attempts/:id/submit
+Enviar respostas (idempotente).
+GET
+/attempts/:id/result
+Resultado autorizado conforme a etapa.
+GET
+/lessons/modules
+Listar módulos publicados.
+GET
+/lessons/:id
+Consultar aula.
+POST
+/cycles/:id/lessons/:lessonId/complete
+Registrar conclusão.
+GET
+/reports/me
+Relatório pessoal.
+GET
+/reports/me/:cycleId
+Relatório do ciclo.
+POST
+/admin/videos
+Cadastrar debate.
+PATCH
+/admin/videos/:id
+Editar debate.
+DELETE
+/admin/videos/:id
+Arquivar (exclusão lógica).
+POST
+/admin/videos/:id/transcription
+Enviar transcrição autorizada com declaração de
+direitos [v1.1].
+POST
+/admin/videos/:id/process
+Criar job de processamento (idempotente).
+GET
+/admin/ai-jobs
+Listar processamento, custo e falhas.
+POST
+/admin/ai-jobs/:id/retry | /cancel
+Reprocessar ou cancelar [v1.1].
+GET
+/admin/quizzes?status=
+Listar questionários por estado [v1.1].
+PATCH
+/admin/quizzes/:id/questions/:qid
+Editar questão em revisão [v1.1].
+POST
+/admin/quizzes/:id/approve | /reject
+Aprovar ou reprovar (motivo obrigatório na reprovação).
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 15
+Método
+Endpoint
+Ação
+POST/PATCH
+/admin/lessons, /admin/modules, /admin/categories
+Gerenciar conteúdo e categorias [v1.1].
+GET/PATCH
+/admin/users
+Listar e gerenciar usuários (acesso individual auditado)
+[v1.1].
+GET
+/admin/reports/overview | /users | /videos
+Indicadores gerais, por usuário e por debate.
+GET
+/admin/audit-logs
+Consultar auditoria [v1.1].
+GET
+/health
+Verificação de saúde (API e worker) [v1.1].
+9.1. Padrões de API
+  Paginação por cursor ou página em todas as listagens; filtros e ordenação validados.
+ Cabeçalho Idempotency-Key em submit, process e criação de ciclo.
+ Status HTTP coerentes (400, 401, 403, 404, 409, 422, 429) e mensagens sem detalhes internos.
+ Limites de tamanho de requisição e rate limiting por IP e por usuário (mais restritivo em endpoints de
+tentativa e eventos de vídeo) [v1.1].
+ Documentação OpenAPI/Swagger gerada dos schemas Zod; versionamento por prefixo.
+10. Segurança, privacidade e integridade
+Área
+Controle recomendado
+Autenticação
+Supabase Auth; confirmação de e-mail; política de senha; proteção contra enumeração de usuários;
+CAPTCHA/limites no cadastro [v1.1].
+Autorização
+Middleware de papel no backend e RLS no Supabase; testes automatizados de RLS [v1.1].
+Admin
+Provisionamento controlado, MFA obrigatório, sem endpoint público de promoção, recuperação
+documentada.
+Segredos
+OPENAI_API_KEY e service_role somente no servidor; rotação periódica; varredura de segredos no CI
+[v1.1].
+Gabaritos
+Tabela separada sem acesso de usuário; não enviar respostas corretas antes do fim da avaliação final.
+Respostas
+Usuário acessa apenas seus dados; admin conforme finalidade, com auditoria.
+API
+Validação, rate limiting, CORS restrito, cabeçalhos de segurança (helmet), proteção contra abuso.
+IA [v1.1]
+Mitigação de prompt injection, saída estruturada validada, minimização de dados enviados (nenhum
+dado pessoal de usuários), registro de custo.
+Banco
+Constraints, transações, backups diários com teste de restauração, migrations versionadas.
+Auditoria
+Registro imutável (append-only) de ações administrativas relevantes.
+Privacidade
+Política de privacidade, base legal por finalidade, retenção, exclusão e atendimento a direitos do titular
+(LGPD).
+Conteúdo
+Respeitar direitos autorais e termos; registrar origem e permissão de cada vídeo e transcrição.
+10.1. LGPD [v1.1]
+  Designar encarregado (DPO) e canal de atendimento ao titular.
+ Mapear finalidades e bases legais (execução de contrato/serviço, consentimento, legítimo interesse) e
+registrar em documento de tratamento.
+ Cadastro com declaração de idade; se menores de 18 anos forem aceitos, tratar conforme art. 14 da LGPD
+(consentimento específico de responsável) ou restringir o cadastro a maiores de 18. Decisão pendente
+(Seção 17).
+ Elaborar relatório de impacto (RIPD), dado o tratamento de resultados de avaliação individuais.
+ Retenção: definir prazos para respostas, transcrições, logs e backups; anonimizar na exclusão da conta.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 16
+ Resposta a incidentes: procedimento de comunicação à ANPD e aos titulares.
+ Recomenda-se revisão por assessoria jurídica antes do lançamento.
+10.2. Supabase e credenciais
+A chave service_role nunca é exposta ao navegador. A chave pública/anon pode ser usada no frontend
+somente para o fluxo de autenticação, com RLS negando acesso direto às tabelas sensíveis.
+11. Relatórios e metodologia de comparação
+11.1. Indicadores individuais
+  Pontuação e percentual de acertos inicial e final.
+ Variação em pontos percentuais (final menos inicial) e ganho normalizado [v1.1].
+ Quantidade de acertos e erros por etapa.
+ Desempenho por categoria de conhecimento.
+ Tempo de resposta e conclusão, como indicadores auxiliares (sem uso punitivo).
+ Histórico por debate e por ciclo.
+11.2. Indicadores administrativos
+  Total de usuários cadastrados e ativos.
+ Debates publicados e questionários aprovados.
+ Ciclos iniciados, concluídos e abandonados por etapa [v1.1].
+ Taxa de conclusão da trilha.
+ Média inicial e final dos ciclos concluídos.
+ Variação média, ganho normalizado médio e distribuição por categoria.
+ Qualidade dos itens: índice de dificuldade e discriminação por questão, para identificar perguntas ambíguas
+[v1.1].
+11.3. Cálculos
+  Percentual de acertos = (respostas corretas / questões válidas) x 100.
+ Variação em pontos percentuais = percentual final - percentual inicial.
+ Variação relativa = ((final - inicial) / inicial) x 100, quando o percentual inicial for maior que zero.
+ [v1.1] Ganho normalizado = (final - inicial) / (100 - inicial), quando o percentual inicial for menor que 100;
+reduz o efeito teto.
+ [v1.1] Questões anuladas após aprovação: excluídas do cálculo de ambas as etapas e registradas
+(denominador ajustado).
+Interpretação responsável: melhora entre a avaliação inicial e a final indica evolução observada no ciclo, mas não
+prova que as aulas foram a única causa. Para alegações de eficácia, considerar grupo de comparação, instrumentos
+equivalentes e controle de fatores externos. [v1.1] Os relatórios devem informar que as médias consideram apenas
+ciclos concluídos e apresentar a taxa de abandono ao lado.
+11.4. Comparabilidade do instrumento
+Como o requisito é repetir as mesmas questões em ordem aleatória, a comparação é direta, mas há efeito de
+memória e familiaridade, agravado se houver feedback entre as etapas (por isso o gabarito é retido até o fim)
+[v1.1]. O relatório deve explicitar essa característica. Evolução futura: banco de itens maior com versões
+paralelas equivalentes e dificuldade calibrada.
+12. Estrutura de pastas
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 17
+Monorepo com frontend, backend, pacote compartilhado, banco e documentação separados:
+plataforma-debates/
+|-- frontend/
+|   |-- src/
+|   |   |-- assets/
+|   |   |-- components/{common,video,quiz,lessons,charts}/
+|   |   |-- layouts/{AuthLayout,UserLayout,AdminLayout}.vue
+|   |   |-- pages/{auth,user,admin}/
+|   |   |-- router/  stores/  services/  composables/  plugins/
+|   |   `-- main.js
+|   `-- package.json
+|-- backend/
+|   |-- src/
+|   |   |-- config/  controllers/  middlewares/  routes/
+|   |   |-- services/{openai,youtube,quiz,cycles,reports}/
+|   |   |-- jobs/  workers/  repositories/  validators/  utils/
+|   |   |-- app.js
+|   |   `-- server.js
+|   |-- tests/{unit,integration,rls}/
+|   `-- package.json
+|-- packages/shared/        # schemas Zod e tipos compartilhados [v1.1]
+|-- database/{migrations,seeds,policies}/
+|-- e2e/                    # testes Playwright [v1.1]
+|-- docs/{architecture.md,database.md,api.md,privacy.md,runbook.md}
+|-- .github/workflows/
+|-- docker-compose.yml  .gitignore  .env.example  README.md
+13. Infraestrutura e implantação
+Componente
+Opção inicial
+Frontend
+Vercel ou hospedagem estática equivalente.
+API backend
+Railway ou VPS gerenciada.
+Worker IA
+Processo separado no mesmo provedor ou VPS.
+Banco/Auth
+Supabase.
+Arquivos
+Supabase Storage.
+Versionamento
+GitHub.
+CI/CD
+GitHub Actions (lint, testes, varredura de segredos, migrations).
+Monitoramento
+Logs estruturados com correlation id; Sentry; alertas de jobs travados, custo e erros 5xx [v1.1].
+13.1. Ambientes
+  Desenvolvimento, homologação e produção, com projetos Supabase, chaves, domínios e armazenamento
+separados.
+ Segredos por variáveis de ambiente do provedor; .env.example sem valores reais.
+ Migrations versionadas e executadas de forma controlada.
+ [v1.1] Backups automáticos com teste periódico de restauração e plano de rollback de migrations.
+13.2. Processos separados
+API HTTP e worker são processos independentes. Falha ou lentidão no processamento de vídeos não deve
+indisponibilizar login, navegação ou relatórios.
+13.3. Estratégia de testes [v1.1]
+  Unitários: cálculo de pontuação, ganho normalizado, máquina de estados, embaralhamento e consolidação
+de progresso de vídeo.
+ Integração: endpoints com banco de teste; autorização por papel; idempotência de submit e de jobs.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 18
+ RLS: testes que provam que USER não lê gabarito, respostas de terceiros nem dados administrativos.
+ Contrato: respostas de IA validadas contra schema com amostras reais e adversariais (prompt injection).
+ E2E (Playwright): jornada completa do ciclo e bloqueios de etapa.
+ Carga básica: concorrência de envio de tentativas e fila de jobs.
+14. Roadmap e estimativas
+Estimativa indicativa para uma pessoa desenvolvedora com experiência nas tecnologias escolhidas, em dias
+úteis. [v1.1] Valores revistos para incluir LGPD, segurança e testes.
+Fase
+Entregas
+Estimativa
+1. Fundação
+Monorepo, Vue/Vuetify, Express, Supabase, migrations, CI e ambientes.
+4-5 dias
+2. Autenticação e LGPD
+Cadastro, login, recuperação, perfis, consentimentos, MFA admin,
+exclusão/exportação.
+4-5 dias
+3. Administração
+Dashboard e CRUD de vídeos, categorias, usuários e aulas.
+5-6 dias
+4. Vídeos
+Player incorporado, validação de incorporação, eventos e progresso.
+4-5 dias
+5. Ciclo e questionários
+Máquina de estados, motor de avaliação, embaralhamento persistido,
+correção, versionamento.
+8-10 dias
+6. Aprendizagem
+Módulos, aulas, obrigatoriedade e bloqueios de etapa.
+4-5 dias
+7. Relatórios
+Indicadores individuais e administrativos, gráficos.
+4-5 dias
+Marco A - MVP sem IA
+Fases 1 a 7, com questionários criados manualmente e transcrição por
+entrada administrativa.
+7-8 semanas
+8. OpenAI
+Análise, prompts versionados, geração estruturada, golden set.
+8-12 dias
+9. Automação
+Fila, workers, retry, lease, interface de revisão e publicação.
+5-7 dias
+10. Qualidade
+Testes, segurança, correções, observabilidade e implantação.
+8-10 dias
+Marco B - Completo
+Fases 1 a 10.
+11-14 semanas
+Estimativas são referência para planejamento, não compromisso de prazo. Dependem da qualidade das transcrições,
+da definição das decisões em aberto e do nível de testes exigido.
+14.1. Sequência recomendada
+  Sprint 1: fundação técnica, estrutura do repositório e banco.
+ Sprint 2: autenticação, LGPD básica e administração.
+ Sprint 3: vídeos, progresso e fluxo inicial de ciclo.
+ Sprint 4: questionários, motor de tentativas e máquina de estados.
+ Sprint 5: aulas, trilha e bloqueios de etapa.
+ Sprint 6: relatórios, indicadores e entrega do MVP (Marco A).
+ Sprint 7: integração OpenAI e processamento assíncrono.
+ Sprint 8: revisão administrativa, testes integrados, segurança e implantação (Marco B).
+15. Critérios de aceite
+ID
+Critério verificável
+AC-01
+Visitante consegue criar conta, aceitar termos e confirmar e-mail.
+AC-02
+Usuário comum não consegue acessar endpoints ou telas administrativas por URL direta.
+AC-03
+Administrador cadastra debate, declara direitos e inicia o processamento conforme configuração.
+AC-04
+Job registra status, falhas e tentativas; processamento não duplica indevidamente.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 19
+ID
+Critério verificável
+AC-05
+Transcrição e análise ficam armazenadas com rastreabilidade (origem, modelo, versão de prompt).
+AC-06
+IA gera questionário validado por schema e o deixa pendente de revisão.
+AC-07
+Questionário não fica disponível ao público antes da aprovação.
+AC-08
+Usuário assiste ao vídeo e só então recebe a avaliação inicial.
+AC-09
+Usuário conclui aulas obrigatórias antes de liberar a etapa final.
+AC-10
+Segunda visualização é registrada antes da avaliação final.
+AC-11
+Avaliação final usa a mesma versão de questões e alternativas, em ordem aleatória.
+AC-12
+Gabarito não é exposto em respostas de API antes do fim da avaliação final.
+AC-13
+Resultados e relatórios correspondem às respostas registradas.
+AC-14
+Usuário acessa somente seus próprios dados (comprovado por testes de RLS).
+AC-15
+Administrador consulta indicadores agregados e ações administrativas são auditáveis.
+AC-16 [v1.1]
+Transições de ciclo inválidas são rejeitadas com 409; transição ocorre apenas após validação do backend.
+AC-17 [v1.1]
+Reenvio de uma tentativa com a mesma Idempotency-Key não duplica respostas nem altera a nota.
+AC-18 [v1.1]
+Tentativa interrompida é retomada com a mesma ordem de perguntas e alternativas.
+AC-19 [v1.1]
+Critério de conclusão de vídeo é calculado no backend e não é satisfeito por saltos ou eventos implausíveis.
+AC-20 [v1.1]
+Job travado é recuperado após expiração do lease sem executar duas vezes a mesma etapa.
+AC-21 [v1.1]
+Transcrição sem declaração de direitos não inicia processamento.
+AC-22 [v1.1]
+Questionário aprovado não pode ser alterado; edição gera nova versão e ciclos em andamento mantêm a
+versão original.
+AC-23 [v1.1]
+Usuário consegue exportar seus dados e solicitar exclusão; dados pessoais são anonimizados conforme
+política.
+AC-24 [v1.1]
+Indicadores agregados não são exibidos para grupos com menos de n respondentes (padrão 5).
+AC-25 [v1.1]
+Telas principais atendem a verificações automatizadas de acessibilidade (WCAG 2.1 AA) sem falhas
+críticas.
+16. Riscos e recomendações
+Risco
+Impacto
+Tratamento recomendado
+Acesso à transcrição do
+YouTube
+Nem todo vídeo oferece transcrição ou
+áudio processável.
+Entrada administrativa de transcrição autorizada como
+caminho principal; escolher vídeos com licença.
+Direitos autorais e termos
+Processar ou reutilizar conteúdo sem
+autorização gera risco jurídico.
+Política de seleção, declaração de direitos obrigatória,
+registro de origem.
+Difamação e neutralidade
+[v1.1]
+Rotular pessoas reais pode gerar
+contestação e dano reputacional.
+Política editorial (6.7), linguagem prudente, equilíbrio
+entre participantes, canal de contestação.
+Qualidade da IA
+Falsas classificações comprometem a
+credibilidade.
+Evidência textual, incerteza, revisão humana, golden
+set e métricas.
+Prompt injection [v1.1]
+Transcrição pode manipular o modelo.
+Dados delimitados, saída em schema, sem
+ferramentas, validação e revisão.
+Vídeos longos
+Tempo, custo e limites de
+processamento.
+Segmentação, checkpoints, limites e controle de custo.
+Fraude de progresso
+Eventos do navegador podem ser
+manipulados.
+Validação no backend, plausibilidade, critério
+transparente; reconhecer limites.
+Memorização das respostas
+Repetir o questionário infla a nota final.
+Reter gabarito até o fim, informar o efeito, planejar
+versões paralelas.
+
+
+Plataforma de Análise Crítica de Debates - Especificação v1.1 (revisada)
+Página 20
+Risco
+Impacto
+Tratamento recomendado
+Privacidade e menores
+[v1.1]
+Resultados são dados pessoais; público
+aberto inclui possíveis menores.
+LGPD (10.1), minimização, RLS, retenção, decisão
+sobre idade mínima.
+Custo da API
+Vídeos extensos podem custar mais
+que o esperado.
+Estimativa por minuto/token, tetos por vídeo e mês,
+aprovação de orçamento.
+Dependência de um único
+admin [v1.1]
+Perda de acesso interrompe a
+operação.
+MFA, break-glass documentado, backups e segundo
+responsável técnico.
+Dependência de terceiros
+[v1.1]
+Mudanças em YouTube, OpenAI ou
+Supabase afetam o produto.
+Camada de abstração (services), monitoramento e
+testes de contrato.
+16.1. Recomendações finais
+  Começar por fundação, autenticação, banco e regras de ciclo antes da integração com IA (Marco A).
+ Tratar o questionário aprovado como artefato versionado e imutável.
+ Manter a IA como assistente editorial, não como autoridade factual.
+ Separar API e workers desde o início.
+ Escrever testes automatizados para transições do ciclo, autorização, gabarito, idempotência e cálculo de
+resultados.
+ Documentar prompts, modelo utilizado e versões dos schemas para reproduzir e auditar gerações.
+ Validar a questão jurídica (direitos de conteúdo e LGPD) antes do lançamento público.
+17. Decisões em aberto e valores padrão propostos [v1.1]
+Para cada decisão pendente da v1.0 foi proposto um padrão que permite iniciar o desenvolvimento. Os valores
+devem ser confirmados ou ajustados.
+Decisão
+Padrão proposto
+Situação
+Critério de visualização
+concluída
+90% de segundos únicos; velocidade até 2x; saltos para frente não
+contam.
+Confirmar
+Questões por debate
+15 (mínimo 10, máximo 20), distribuídas entre categorias e
+dificuldades.
+Confirmar
+Repetição de ciclo
+Permitida após concluir; novo ciclo independente; um ciclo ativo por
+debate; marcado como repetição nos relatórios.
+Confirmar
+Limite de tempo da avaliação
+Sem limite rígido; tempo registrado; tentativa pode ser retomada com a
+mesma ordem.
+Confirmar
+Aulas obrigatórias
+Módulos globais de fundamentos + aulas específicas por categoria do
+debate.
+Confirmar
+Fonte de transcrição
+Entrada administrativa de transcrição autorizada; ASR apenas com
+autorização expressa.
+Depende da origem
+dos vídeos
+Retenção de dados
+Respostas enquanto a conta existir; anonimização na exclusão; logs
+por 12 meses; transcrições enquanto o debate estiver ativo. Validar
+com assessoria jurídica.
+Confirmar
+Visualização administrativa
+individual
+Padrão: dados agregados; acesso individual apenas para suporte, com
+registro em auditoria.
+Confirmar
+Feedback após a avaliação
+inicial
+Somente pontuação e categorias; gabarito e explicações após a final.
+Confirmar
+Idade mínima [v1.1]
+18 anos (evita consentimento parental da LGPD no lançamento).
+Confirmar
+Abandono de ciclo
+90 dias sem atividade.
+Confirmar
+Mínimo para exibir agregados
+n = 5 respondentes.
+Confirmar
