@@ -31,6 +31,26 @@ const supabaseAuth = createClient(supabaseUrl, supabasePublishableKey, {
   },
 });
 
+const allowedOrigins = new Set(
+  [process.env.APP_BASE_URL, process.env.CORS_ALLOWED_ORIGINS]
+    .filter(Boolean)
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));
 const frontendBuildPath = path.resolve(__dirname, '../frontend/dist');
 app.use(express.static(frontendBuildPath));

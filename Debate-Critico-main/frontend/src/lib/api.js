@@ -6,7 +6,8 @@ async function api(path, { method = 'GET', body, accessToken } = {}) {
   const token = accessToken || session.accessToken;
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`/api/v1${path}`, {
+  const apiBaseUrl = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

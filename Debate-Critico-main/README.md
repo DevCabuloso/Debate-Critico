@@ -54,6 +54,38 @@ where email = 'email-do-admin@exemplo.com';
 
 Depois disso, administradores autenticados podem convidar outras pessoas na seção **Usuários** do painel. A pessoa recebe um e-mail, abre o link e define a senha em `/admin/accept-invite`; o servidor só finaliza um convite válido vinculado a um perfil ADMIN. Não existe cadastro público de administradores.
 
+## Publicação no Vercel e Railway
+
+Estrutura recomendada:
+
+- **Railway:** hospeda a API Express e o servidor do projeto.
+- **Vercel:** hospeda somente o frontend Vue.
+- **Supabase:** continua hospedando banco e autenticação.
+
+### Railway
+
+1. Importe o repositório do GitHub no Railway.
+2. Defina o diretório raiz como `Debate-Critico-main` se o repositório tiver essa pasta adicional.
+3. Configure as variáveis:
+   - `SUPABASE_URL`
+   - `SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SECRET_KEY`
+   - `APP_BASE_URL=https://seu-projeto.vercel.app`
+   - `CORS_ALLOWED_ORIGINS=https://seu-projeto.vercel.app`
+4. Publique o serviço. O Railway fornece uma URL como `https://debate-api.up.railway.app`.
+5. Teste `https://debate-api.up.railway.app/api/v1/health`.
+
+O arquivo `railway.toml` deste projeto usa `npm run build` na compilação e `npm start` na execução.
+
+### Vercel
+
+1. Importe o mesmo repositório no Vercel.
+2. Configure o diretório raiz como `Debate-Critico-main` se necessário.
+3. Configure `VITE_API_URL=https://debate-api.up.railway.app/api/v1`.
+4. O Vercel usa `npm run build` e publica `frontend/dist`; as rotas Vue são redirecionadas para `index.html`.
+
+No Supabase, adicione a URL do Vercel em Authentication > URL Configuration > Redirect URLs. Configure o mesmo domínio em `APP_BASE_URL` no Railway.
+
 ## Cadastro e conteúdo
 
 - O cadastro de usuários fica em `/register`; a API registra aceite dos termos. Em `/admin/profiles`, o administrador escolhe se os novos cadastros precisam confirmar o e-mail. Quando a confirmação está desativada, o servidor cria contas já confirmadas e limita tentativas por endereço.
