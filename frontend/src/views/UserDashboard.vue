@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { clearSession, session } from '../lib/session';
+import AppHeader from '../components/AppHeader.vue';
 
 const router = useRouter();
 const tab = ref('debates');
@@ -11,7 +12,6 @@ const error = ref('');
 const notice = ref('');
 const videos = ref([]);
 const quizzes = ref([]);
-const lessons = ref([]);
 const reports = ref([]);
 const cycle = ref(null);
 const attempt = ref(null);
@@ -36,15 +36,13 @@ async function loadDashboard() {
   loading.value = true;
   message();
   try {
-    const [videoResult, quizResult, lessonResult, reportResult] = await Promise.all([
+    const [videoResult, quizResult, reportResult] = await Promise.all([
       api('/videos'),
       api('/quizzes'),
-      api('/lessons/modules'),
       api('/reports/me'),
     ]);
     videos.value = videoResult.items || [];
     quizzes.value = quizResult.items || [];
-    lessons.value = lessonResult.items || [];
     reports.value = reportResult.items || [];
   } catch (requestError) {
     message(requestError.message);
@@ -137,39 +135,18 @@ function logout() {
   router.replace('/');
 }
 
-function openVideo(url) {
-  try {
-    const parsed = new URL(url);
-    if (['https:', 'http:'].includes(parsed.protocol)) window.open(parsed.href, '_blank', 'noopener,noreferrer');
-  } catch {
-    message('O link desta aula é inválido.');
-  }
-}
-
 onMounted(loadDashboard);
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="sticky top-0 z-10 border-b border-[#e3e9e5] bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-3 md:px-8">
-        <RouterLink to="/app" class="flex items-center gap-3 font-bold tracking-tight">
-          <span class="grid size-9 place-items-center rounded-xl bg-[#235d46] font-serif text-lg text-white">D</span>
-          <span>Debate<span class="font-normal text-[#668074]">.crítico</span></span>
-        </RouterLink>
-        <div class="flex items-center gap-3">
-          <span class="hidden text-sm text-[#52645a] sm:inline">{{ session.user?.name }} · {{ session.user?.role === 'ADMIN' ? 'Administrador' : 'Usuário' }}</span>
-          <RouterLink v-if="session.user?.role === 'ADMIN'" to="/admin" class="secondary-button text-sm">Administração</RouterLink>
-          <button class="secondary-button text-sm" @click="logout">Sair</button>
-        </div>
-      </div>
-    </header>
+  <div class="app-page">
+    <AppHeader area="user" :user-name="session.user?.name" :user-role="session.user?.role" @logout="logout" />
 
-    <div class="mx-auto grid max-w-[1440px] gap-6 px-4 py-6 md:grid-cols-[230px_minmax(0,1fr)] md:px-8 md:py-9">
+    <div class="app-workspace">
       <aside class="surface h-fit p-3">
         <p class="px-3 py-2 text-[11px] font-bold tracking-[.16em] text-[#78877f]">ÁREA DO USUÁRIO</p>
         <nav class="grid gap-1">
-          <button v-for="item in [['debates', 'Debates'], ['quizzes', 'Questionários'], ['performance', 'Desempenho'], ['lessons', 'Videoaulas']]" :key="item[0]"
+          <button v-for="item in [['debates', 'Debates'], ['quizzes', 'Questionários'], ['performance', 'Desempenho'], ['minicourse', 'Minicurso']]" :key="item[0]"
             class="rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition"
             :class="tab === item[0] ? 'bg-[#eaf2ed] text-[#235d46]' : 'text-[#53645a] hover:bg-[#f4f7f4]'"
             @click="tab = item[0]">{{ item[1] }}</button>
@@ -221,7 +198,7 @@ onMounted(loadDashboard);
                   class="aspect-video w-full rounded-xl bg-black"
                   :src="`https://www.youtube-nocookie.com/embed/${currentVideo.youtubeId}`"
                   :title="currentVideo.title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-                <p v-if="cycle.state === 'LEARNING'" class="text-sm text-[#64756c]">Conclua as videoaulas obrigatórias para seguir para a etapa final.</p>
+                <p v-if="cycle.state === 'LEARNING'" class="text-sm text-[#64756c]">A etapa antiga foi desativada. Atualize o ciclo para continuar sem videoaulas; o minicurso continua opcional.</p>
                 <p v-if="resultMessage" class="notice success">{{ resultMessage }}</p>
                 <form v-if="attempt" class="grid gap-4" @submit.prevent="submitAttempt">
                   <fieldset v-for="(question, index) in attempt.questions" :key="question.id" class="surface bg-[#fbfcfb] p-4">
@@ -268,21 +245,25 @@ onMounted(loadDashboard);
           </section>
 
           <section v-else>
-            <div class="mb-6"><p class="text-xs font-bold tracking-[.18em] text-[#34745b]">CONTEÚDO FORMATIVO</p><h1 class="mt-2 font-serif text-4xl">Videoaulas</h1><p class="mt-2 text-[#64756c]">Aulas de apoio para aprofundar sua análise de argumentos.</p></div>
-            <div v-if="!lessons.length" class="surface p-7 text-sm text-[#64756c]">As videoaulas serão disponibilizadas quando forem publicadas pela equipe.</div>
-            <div v-for="module in lessons" :key="module.id" class="mb-7">
-              <h2 class="mb-3 font-serif text-2xl">{{ module.title }}</h2>
-              <p v-if="module.description" class="mb-3 text-sm text-[#64756c]">{{ module.description }}</p>
-              <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <article v-for="lesson in module.lessons" :key="lesson.id" class="surface p-5">
-                  <p class="text-xs font-semibold text-[#34745b]">{{ lesson.category || 'Conteúdo formativo' }}</p>
-                  <h3 class="mt-2 font-bold">{{ lesson.title }}</h3>
-                  <p class="mt-2 text-sm leading-6 text-[#64756c]">{{ lesson.description || 'Videoaula de apoio para a trilha de aprendizagem.' }}</p>
-                  <button v-if="lesson.videoUrl" class="secondary-button mt-4 text-sm" @click="openVideo(lesson.videoUrl)">Assistir videoaula</button>
-                  <p v-else class="mt-4 text-sm text-[#78877f]">Vídeo ainda não disponibilizado.</p>
-                </article>
+            <header class="mb-6">
+              <p class="text-xs font-bold tracking-[.18em] text-[#34745b]">TRILHA DE APRENDIZAGEM</p>
+              <h1 class="mt-2 font-serif text-4xl">Minicurso</h1>
+              <p class="mt-2 max-w-2xl text-[#64756c]">Aprenda a identificar falácias, analisar estratégias de persuasão e verificar informações com cuidado.</p>
+            </header>
+            <article class="app-course-promo">
+              <div class="app-course-promo-main">
+                <p class="app-course-promo-label">ARGUMENTA · PENSAMENTO CRÍTICO</p>
+                <h2>Leia os argumentos além das palavras.</h2>
+                <p>Uma trilha interativa, com exemplos e exercícios para praticar no seu ritmo. Sem videoaulas: o aprendizado acontece no próprio minicurso.</p>
+                <RouterLink to="/app/curso" class="app-course-cta">Acessar minicurso <span aria-hidden="true">→</span></RouterLink>
               </div>
-            </div>
+              <div class="app-course-promo-points">
+                <div><span>01</span><p><strong>Entenda</strong> a estrutura dos argumentos e o papel das evidências.</p></div>
+                <div><span>02</span><p><strong>Pratique</strong> com exercícios comentados e exemplos fictícios.</p></div>
+                <div><span>03</span><p><strong>Aplique</strong> seus critérios na análise de debates.</p></div>
+              </div>
+            </article>
+            <p class="mt-4 text-xs leading-5 text-[#78877f]">O minicurso é opcional e não bloqueia a avaliação final dos ciclos de debate.</p>
           </section>
         </template>
       </main>

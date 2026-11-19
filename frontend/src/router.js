@@ -6,6 +6,7 @@ import AdminInviteView from './views/AdminInviteView.vue';
 import RegisterView from './views/RegisterView.vue';
 import UserDashboard from './views/UserDashboard.vue';
 import AdminDashboard from './views/AdminDashboard.vue';
+import MinicourseView from './views/MinicourseView.vue';
 import ContentManagement from './views/ContentManagement.vue';
 import ProfileManagement from './views/ProfileManagement.vue';
 
@@ -17,6 +18,7 @@ const router = createRouter({
     { path: '/admin/accept-invite', name: 'admin-accept-invite', component: AdminInviteView },
     { path: '/register', name: 'register', component: RegisterView },
     { path: '/app', name: 'app', component: UserDashboard, meta: { auth: true } },
+    { path: '/app/curso', name: 'app-minicourse', component: MinicourseView, meta: { auth: true } },
     { path: '/admin', name: 'admin', component: AdminDashboard, meta: { auth: true, admin: true } },
     { path: '/admin/content', name: 'admin-content', component: ContentManagement, meta: { auth: true, admin: true } },
     { path: '/admin/profiles', name: 'admin-profiles', component: ProfileManagement, meta: { auth: true, admin: true } },

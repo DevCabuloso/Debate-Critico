@@ -119,7 +119,86 @@ function shuffle(items) {
   return shuffled;
 }
 
+function normalizeManualQuizQuestions(input) {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 50) {
+    return { error: 'Inclua entre 1 e 50 questões.' };
+  }
+
+  const questions = [];
+  for (const [index, question] of input.entries()) {
+    const number = index + 1;
+    if (!question || typeof question !== 'object' || Array.isArray(question)) {
+      return { error: `A questão ${number} é inválida.` };
+    }
+
+    const statement = typeof question.statement === 'string' ? question.statement.trim() : '';
+    const explanation = typeof question.explanation === 'string' ? question.explanation.trim() : '';
+    const category = typeof question.category === 'string' ? question.category.trim() : '';
+    const difficulty = question.difficulty;
+    const evidenceExcerpt = typeof question.evidenceExcerpt === 'string' ? question.evidenceExcerpt.trim() : '';
+    if (!statement || statement.length > 1000 || !explanation || explanation.length > 2000
+      || !category || category.length > 100 || !evidenceExcerpt || evidenceExcerpt.length > 2000) {
+      return { error: `Preencha enunciado, explicação, categoria e evidência da questão ${number} dentro dos limites indicados.` };
+    }
+    if (!['EASY', 'MEDIUM', 'HARD'].includes(difficulty)) {
+      return { error: `Selecione a dificuldade da questão ${number}.` };
+    }
+
+    if (!Array.isArray(question.options) || question.options.length < 2 || question.options.length > 6) {
+      return { error: `A questão ${number} deve ter entre 2 e 6 alternativas.` };
+    }
+    const options = question.options.map((option) => (typeof option === 'string' ? option.trim() : ''));
+    if (options.some((option) => !option || option.length > 500)
+      || new Set(options.map((option) => option.toLocaleLowerCase('pt-BR'))).size !== options.length) {
+      return { error: `Preencha alternativas distintas e com até 500 caracteres na questão ${number}.` };
+    }
+    if (!Number.isInteger(question.correctOption) || question.correctOption < 0 || question.correctOption >= options.length) {
+      return { error: `Marque a alternativa correta da questão ${number}.` };
+    }
+
+    let timestampSeconds = null;
+    if (question.timestampSeconds !== undefined && question.timestampSeconds !== null && question.timestampSeconds !== '') {
+      if (!Number.isInteger(question.timestampSeconds) || question.timestampSeconds < 0 || question.timestampSeconds > 2147483647) {
+        return { error: `O timestamp da questão ${number} deve ser um número inteiro positivo.` };
+      }
+      timestampSeconds = question.timestampSeconds;
+    }
+
+    questions.push({
+      statement,
+      explanation,
+      category,
+      difficulty,
+      evidenceExcerpt,
+      timestampSeconds,
+      options,
+      correctOption: question.correctOption,
+    });
+  }
+
+  return { questions };
+}
+
 async function getCycle(cycleId, userId) {
+  const result = await supabase
+    .from('user_cycles')
+    .select('*')
+    .eq('id', cycleId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (result.error || !result.data || result.data.state !== 'LEARNING') return result;
+
+  const migrated = await supabase
+    .from('user_cycles')
+    .update({ state: 'FINAL_QUIZ', state_updated_at: new Date().toISOString() })
+    .eq('id', cycleId)
+    .eq('user_id', userId)
+    .eq('status', 'ACTIVE')
+    .eq('state', 'LEARNING')
+    .select('*')
+    .maybeSingle();
+  if (migrated.error || migrated.data) return migrated;
+
   return supabase
     .from('user_cycles')
     .select('*')
@@ -484,7 +563,7 @@ app.post('/api/v1/attempts/:id/submit', ensureAuth, asyncRoute(async (req, res) 
   const correct = answerRows.filter((answer) => answer.is_correct).length;
   const score = Math.round((correct / answerRows.length) * 100);
   const submittedAt = new Date().toISOString();
-  const nextState = attempt.attempt_type === 'INITIAL' ? 'LEARNING' : 'COMPLETED';
+  const nextState = attempt.attempt_type === 'INITIAL' ? 'FINAL_QUIZ' : 'COMPLETED';
   const { error: updateAttemptError } = await supabase
     .from('quiz_attempts')
     .update({
@@ -795,6 +874,64 @@ app.patch('/api/v1/admin/videos/:id', ensureAuth, ensureAdmin, asyncRoute(async 
   if (!data) return res.status(404).json({ code: 'VIDEO_NOT_FOUND', message: 'Debate não encontrado.' });
   await audit(req, 'VIDEO_STATUS_CHANGE', 'video', data.id, { title: data.title, status });
   res.json({ ok: true, item: data });
+}));
+
+app.post('/api/v1/admin/quizzes', ensureAuth, ensureAdmin, asyncRoute(async (req, res) => {
+  const videoId = typeof req.body?.videoId === 'string' ? req.body.videoId : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId)) {
+    return res.status(400).json({ code: 'INVALID_VIDEO', message: 'Selecione um debate válido.' });
+  }
+
+  const { questions, error: validationError } = normalizeManualQuizQuestions(req.body?.questions);
+  if (validationError) {
+    return res.status(400).json({ code: 'INVALID_QUIZ', message: validationError });
+  }
+
+  const { data: video, error: videoError } = await supabase
+    .from('videos')
+    .select('id')
+    .eq('id', videoId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (videoError) return handleDatabaseError(res, videoError);
+  if (!video) return res.status(404).json({ code: 'VIDEO_NOT_FOUND', message: 'Debate não encontrado.' });
+
+  const { data, error } = await supabase.rpc('create_manual_quiz', {
+    p_video_id: videoId,
+    p_questions: questions.map((question) => ({
+      statement: question.statement,
+      explanation: question.explanation,
+      category: question.category,
+      difficulty: question.difficulty,
+      evidence_excerpt: question.evidenceExcerpt,
+      timestamp_seconds: question.timestampSeconds,
+      options: question.options.map((text) => ({ text })),
+      correct_option: question.correctOption,
+    })),
+  });
+  if (error?.code === 'P0002') {
+    return res.status(404).json({ code: 'VIDEO_NOT_FOUND', message: 'Debate não encontrado.' });
+  }
+  if (error?.code === '22023') {
+    return res.status(400).json({ code: 'INVALID_QUIZ', message: 'Revise os campos e alternativas das questões.' });
+  }
+  if (error) return handleDatabaseError(res, error);
+
+  const quiz = Array.isArray(data) ? data[0] : data;
+  if (!quiz) {
+    return res.status(500).json({ code: 'QUIZ_CREATE_FAILED', message: 'Não foi possível salvar o questionário.' });
+  }
+
+  await audit(req, 'QUIZ_CREATE', 'quiz', quiz.quiz_id, { videoId, version: quiz.version, questionCount: questions.length });
+  res.status(201).json({
+    item: {
+      id: quiz.quiz_id,
+      videoId,
+      version: quiz.version,
+      status: quiz.status,
+      questionCount: questions.length,
+    },
+  });
 }));
 
 app.get('/api/v1/admin/quizzes', ensureAuth, ensureAdmin, asyncRoute(async (req, res) => {

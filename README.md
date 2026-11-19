@@ -1,13 +1,13 @@
 # Plataforma de Análise Crítica de Debates
 
-Aplicação educacional para acompanhar debates, questionários, videoaulas e revisão administrativa.
+Aplicação educacional para acompanhar debates, questionários, um minicurso interativo e revisão administrativa.
 
 ## Tecnologias e estrutura
 
 - `frontend/`: aplicação Vue 3, Vue Router e Tailwind CSS 4, compilada pelo Vite.
 - `backend/server.js`: servidor Express e API REST.
 - `backend/routes/registration.js`: cadastro de usuários e registro de consentimentos.
-- `backend/routes/admin-content.js`: convites de administradores e gerenciamento de módulos e aulas.
+- `backend/routes/admin-content.js`: convites de administradores e gerenciamento de debates.
 - `backend/database/schema.sql`: esquema PostgreSQL para Supabase.
 - `.env`: credenciais locais; nunca compartilhe nem envie esse arquivo ao Git.
 
@@ -39,6 +39,7 @@ O comando compila o Vue/Tailwind e serve a aplicação e a API em `http://localh
 
 1. Crie um projeto Supabase.
 2. No **SQL Editor**, execute [backend/database/schema.sql](./backend/database/schema.sql).
+   - Execute também [backend/database/migrations/002_manual_quiz_creation.sql](./backend/database/migrations/002_manual_quiz_creation.sql) para habilitar a gravação transacional de questionários criados no painel.
    - Se o projeto já tinha o esquema instalado, execute também [backend/database/migrations/001_profiles_management.sql](./backend/database/migrations/001_profiles_management.sql) para habilitar as configurações de cadastro usadas pela página Perfis.
 3. Configure no `.env` as variáveis de [`.env.example`](./.env.example). A chave `SUPABASE_SECRET_KEY` fica exclusivamente no servidor.
 4. Em **Authentication → Providers → Email**, habilite a confirmação de e-mail e configure SMTP para envio das mensagens em produção.
@@ -59,9 +60,11 @@ Depois disso, administradores autenticados podem convidar outras pessoas na seç
 - O painel administrativo `/admin` contém indicadores, revisão de questionários, jobs e auditoria. A página `/admin/profiles` permite convidar, editar, suspender e excluir perfis.
 - A exclusão de perfil é lógica: bloqueia o acesso sem apagar os dados históricos. A mesma página permite habilitar/desabilitar o cadastro público; convites de administradores continuam disponíveis.
 - Quando a confirmação está exigida, ela também precisa estar habilitada em **Supabase → Authentication → Providers → Email**. Quando está desativada, a criação de contas confirmadas é feita pela API administrativa no servidor; a chave secreta nunca é exposta ao navegador.
-- A página `/admin/content` permite cadastrar debates do YouTube, módulos e aulas com links de vídeos hospedados. Os registros começam como rascunho e podem ser publicados pelo administrador.
-- A página de conteúdo **não envia arquivos de vídeo**: ela registra URLs de plataformas externas, conforme definido para esta versão.
+- A página `/admin/content` permite cadastrar e gerenciar debates do YouTube. Os registros começam como rascunho e podem ser publicados pelo administrador.
+- A área do estudante `/app/curso` oferece um minicurso progressivo sobre identificação de falácias, com aulas, avaliações e consulta rápida. O progresso fica salvo localmente no navegador e separado por usuário.
+- Na seção **Questionários** do painel `/admin`, administradores podem criar questionários manualmente e enviá-los para revisão. Eles só ficam disponíveis aos usuários depois de aprovados; geração por IA não faz parte deste fluxo.
+- O minicurso é o conteúdo formativo da plataforma; não há videoaulas.
 
 ## Escopo e limites
 
-O projeto mantém os fluxos atuais de debates, avaliações, relatórios e revisão administrativa, mas ainda é um protótipo. A especificação prevê regras que precisam de implementação adicional antes do uso público, especialmente validação confiável do progresso de reprodução/aulas, transações atômicas de tentativas, processamento real da fila de IA e atendimento completo a solicitações LGPD.
+O projeto mantém os fluxos atuais de debates, avaliações, relatórios e revisão administrativa, mas ainda é um protótipo. A especificação prevê regras que precisam de implementação adicional antes do uso público, especialmente validação confiável do progresso de reprodução, transações atômicas de tentativas, processamento real da fila de IA e atendimento completo a solicitações LGPD.

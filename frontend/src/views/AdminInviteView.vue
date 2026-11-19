@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { api } from '../lib/api';
+import AppHeader from '../components/AppHeader.vue';
 
 const accessToken = ref('');
 const password = ref('');
@@ -70,21 +71,16 @@ async function completeProfile() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
-      <RouterLink to="/admin/login" class="flex items-center gap-3 text-lg font-bold tracking-tight text-[#17241f]">
-        <span class="grid size-10 place-items-center rounded-xl bg-[#235d46] font-serif text-xl text-white">D</span>
-        <span>Debate<span class="font-normal text-[#668074]">.crítico</span></span>
-      </RouterLink>
-    </header>
-    <main class="mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl items-center gap-12 px-5 pb-12 md:grid-cols-[1fr_480px] md:px-8">
-      <section class="max-w-2xl py-8">
+  <div class="app-page">
+    <AppHeader area="public" brand-to="/admin/login" />
+    <main class="app-auth-main">
+      <section class="app-auth-story">
         <p class="mb-5 text-xs font-bold tracking-[.2em] text-[#34745b]">CONVITE DA PLATAFORMA</p>
         <h1 class="max-w-xl font-serif text-5xl leading-[1.08] tracking-tight text-[#17241f] md:text-6xl">Finalize seu perfil.</h1>
         <p class="mt-6 max-w-lg text-lg leading-8 text-[#64756c]">Esta página conclui um cadastro criado por convite e acessado pelo link enviado ao seu e-mail.</p>
       </section>
 
-      <section class="surface p-7 sm:p-9">
+      <section class="app-auth-card">
         <p class="text-xs font-bold tracking-[.18em] text-[#34745b]">CRIAR PERFIL</p>
         <h2 class="mt-3 font-serif text-3xl text-[#17241f]">Defina sua senha</h2>
         <p class="mt-2 text-sm text-[#64756c]">Use uma senha com pelo menos 8 caracteres para ativar seu acesso.</p>

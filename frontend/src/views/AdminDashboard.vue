@@ -1,8 +1,9 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { clearSession, session } from '../lib/session';
+import AppHeader from '../components/AppHeader.vue';
 
 const router = useRouter();
 const tab = ref('overview');
@@ -18,6 +19,9 @@ const auditLogs = ref([]);
 const quizFilter = ref('PENDING_REVIEW');
 const selectedQuiz = ref(null);
 const rejectionReason = ref('');
+const showQuizForm = ref(false);
+const savingQuiz = ref(false);
+const quizForm = reactive({ videoId: '', questions: [newQuizQuestion()] });
 const invite = ref({ name: '', email: '' });
 const sendingInvite = ref(false);
 
@@ -35,7 +39,7 @@ const labels = {
   PENDING_REVIEW: 'Em revisão', APPROVED: 'Aprovado', REJECTED: 'Reprovado',
   QUEUED: 'Na fila', RUNNING: 'Em execução', COMPLETED: 'Concluído', FAILED: 'Falhou', CANCELLED: 'Cancelado',
   ACTIVE: 'Ativo', SUSPENDED: 'Suspenso', USER: 'Usuário', ADMIN: 'Administrador',
-  INITIAL_VIDEO: 'Vídeo inicial', INITIAL_QUIZ: 'Avaliação inicial', LEARNING: 'Aulas',
+  INITIAL_VIDEO: 'Vídeo inicial', INITIAL_QUIZ: 'Avaliação inicial', LEARNING: 'Minicurso opcional',
   FINAL_VIDEO: 'Vídeo final', FINAL_QUIZ: 'Avaliação final', ABANDONED: 'Abandonado',
   ANALYSIS: 'Análise', QUIZ_GENERATION: 'Geração de questionário',
 };
@@ -46,13 +50,34 @@ function percentage(value) { return value == null ? '—' : `${Number(value).toF
 function showError(message) { error.value = message; notice.value = ''; }
 function showNotice(message) { notice.value = message; error.value = ''; }
 
+function newQuizQuestion() {
+  return {
+    statement: '',
+    explanation: '',
+    category: '',
+    difficulty: 'MEDIUM',
+    evidenceExcerpt: '',
+    timestampSeconds: '',
+    options: ['', '', '', ''],
+    correctOption: 0,
+  };
+}
+
 async function loadTab() {
   loading.value = true;
   showError('');
   try {
     if (tab.value === 'overview') overview.value = await api('/admin/reports/overview');
     if (tab.value === 'videos') videos.value = (await api('/admin/videos')).items || [];
-    if (tab.value === 'quizzes') quizzes.value = (await api(`/admin/quizzes${quizFilter.value ? `?status=${quizFilter.value}` : ''}`)).items || [];
+    if (tab.value === 'quizzes') {
+      const [quizResult, videoResult] = await Promise.all([
+        api(`/admin/quizzes${quizFilter.value ? `?status=${quizFilter.value}` : ''}`),
+        api('/admin/videos'),
+      ]);
+      quizzes.value = quizResult.items || [];
+      videos.value = videoResult.items || [];
+      if (!quizForm.videoId && videos.value.length) quizForm.videoId = videos.value[0].id;
+    }
     if (tab.value === 'jobs') jobs.value = (await api('/admin/ai-jobs')).items || [];
     if (tab.value === 'users') users.value = (await api('/admin/users')).items || [];
     if (tab.value === 'audit') auditLogs.value = (await api('/admin/audit-logs')).items || [];
@@ -76,6 +101,62 @@ async function updateVideo(video, status) {
     showNotice(status === 'PUBLISHED' ? 'Debate publicado.' : 'Debate arquivado.');
     await loadTab();
   } catch (requestError) { showError(requestError.message); }
+}
+
+function addQuizQuestion() {
+  if (quizForm.questions.length < 50) quizForm.questions.push(newQuizQuestion());
+}
+
+function removeQuizQuestion(index) {
+  if (quizForm.questions.length > 1) quizForm.questions.splice(index, 1);
+}
+
+function addQuizOption(question) {
+  if (question.options.length < 6) question.options.push('');
+}
+
+function removeQuizOption(question, index) {
+  if (question.options.length <= 2) return;
+  question.options.splice(index, 1);
+  if (question.correctOption === index) question.correctOption = 0;
+  else if (question.correctOption > index) question.correctOption -= 1;
+}
+
+function toggleQuizForm() {
+  showQuizForm.value = !showQuizForm.value;
+  selectedQuiz.value = null;
+  if (showQuizForm.value && !videos.value.length) {
+    showError('Cadastre um debate antes de criar um questionário.');
+  } else {
+    showError('');
+  }
+}
+
+async function saveQuiz() {
+  if (savingQuiz.value) return;
+  savingQuiz.value = true;
+  try {
+    const result = await api('/admin/quizzes', {
+      method: 'POST',
+      body: {
+        videoId: quizForm.videoId,
+        questions: quizForm.questions.map((question) => ({
+          ...question,
+          timestampSeconds: question.timestampSeconds === '' ? null : Number(question.timestampSeconds),
+        })),
+      },
+    });
+    showQuizForm.value = false;
+    quizForm.videoId = videos.value[0]?.id || '';
+    quizForm.questions = [newQuizQuestion()];
+    quizFilter.value = 'PENDING_REVIEW';
+    await loadTab();
+    showNotice(`Questionário v${result.item.version} enviado para revisão.`);
+  } catch (requestError) {
+    showError(requestError.message);
+  } finally {
+    savingQuiz.value = false;
+  }
 }
 
 async function loadQuiz(quiz) {
@@ -144,21 +225,9 @@ onMounted(loadTab);
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="sticky top-0 z-10 border-b border-[#e3e9e5] bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-3 md:px-8">
-        <RouterLink to="/admin" class="flex items-center gap-3 font-bold tracking-tight">
-          <span class="grid size-9 place-items-center rounded-xl bg-[#235d46] font-serif text-lg text-white">D</span>
-          <span>Debate<span class="font-normal text-[#668074]">.crítico</span><span class="ml-2 text-xs font-medium text-[#78877f]">/ administração</span></span>
-        </RouterLink>
-        <div class="flex items-center gap-2">
-          <span class="hidden text-sm text-[#52645a] md:inline">{{ session.user?.name }}</span>
-          <RouterLink to="/app" class="secondary-button text-sm">Área do usuário</RouterLink>
-          <button class="secondary-button text-sm" @click="logout">Sair</button>
-        </div>
-      </div>
-    </header>
-    <div class="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 md:grid-cols-[230px_minmax(0,1fr)] md:px-8 md:py-9">
+  <div class="app-page">
+    <AppHeader area="admin" :user-name="session.user?.name" @logout="logout" />
+    <div class="app-workspace">
       <aside class="surface h-fit p-3">
         <p class="px-3 py-2 text-[11px] font-bold tracking-[.16em] text-[#78877f]">ADMINISTRAÇÃO</p>
         <nav class="grid gap-1">
@@ -166,7 +235,7 @@ onMounted(loadTab);
             :class="tab === item[0] ? 'bg-[#eaf2ed] text-[#235d46]' : 'text-[#53645a] hover:bg-[#f4f7f4]'"
             @click="selectTab(item[0])">{{ item[1] }}</button>
           <RouterLink to="/admin/profiles" class="rounded-lg px-3 py-2.5 text-sm font-semibold text-[#53645a] hover:bg-[#f4f7f4]">Perfis</RouterLink>
-          <RouterLink to="/admin/content" class="mt-2 rounded-lg border-t border-[#e8ede9] px-3 py-3 text-sm font-semibold text-[#235d46] hover:bg-[#f4f7f4]">Vídeos e aulas ↗</RouterLink>
+          <RouterLink to="/admin/content" class="mt-2 rounded-lg border-t border-[#e8ede9] px-3 py-3 text-sm font-semibold text-[#235d46] hover:bg-[#f4f7f4]">Gestão de debates ↗</RouterLink>
         </nav>
       </aside>
 
@@ -209,7 +278,7 @@ onMounted(loadTab);
           </section>
 
           <section v-else-if="tab === 'videos'">
-            <header class="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p class="text-xs font-bold tracking-[.18em] text-[#34745b]">CONTEÚDO</p><h1 class="mt-2 font-serif text-4xl">Debates</h1><p class="mt-2 text-[#64756c]">Gerencie publicação e arquivamento dos debates.</p></div><RouterLink to="/admin/content" class="primary-button">Cadastrar debate ou aula</RouterLink></header>
+            <header class="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p class="text-xs font-bold tracking-[.18em] text-[#34745b]">CONTEÚDO</p><h1 class="mt-2 font-serif text-4xl">Debates</h1><p class="mt-2 text-[#64756c]">Gerencie publicação e arquivamento dos debates.</p></div><RouterLink to="/admin/content" class="primary-button">Cadastrar debate</RouterLink></header>
             <div class="grid gap-3">
               <article v-for="video in videos" :key="video.id" class="surface flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5">
                 <div class="min-w-[220px] flex-1"><div class="flex flex-wrap items-center gap-2"><h2 class="font-semibold">{{ video.title }}</h2><span class="rounded-full bg-[#f0f3f1] px-2.5 py-1 text-xs">{{ label(video.status) }}</span></div><p class="mt-1 text-sm text-[#64756c]">{{ video.categories?.join(', ') || 'Sem categoria' }} · {{ Math.floor(video.duration / 60) }} min</p></div>
@@ -220,7 +289,64 @@ onMounted(loadTab);
           </section>
 
           <section v-else-if="tab === 'quizzes'">
-            <header class="mb-5"><p class="text-xs font-bold tracking-[.18em] text-[#34745b]">REVISÃO HUMANA</p><h1 class="mt-2 font-serif text-4xl">Questionários</h1><p class="mt-2 text-[#64756c]">Conteúdo gerado só é disponibilizado após aprovação explícita.</p></header>
+            <header class="mb-5 flex flex-wrap items-end justify-between gap-4">
+              <div><p class="text-xs font-bold tracking-[.18em] text-[#34745b]">REVISÃO HUMANA</p><h1 class="mt-2 font-serif text-4xl">Questionários</h1><p class="mt-2 text-[#64756c]">Crie questionários manualmente e envie-os para aprovação antes da publicação.</p></div>
+              <button class="primary-button" :disabled="!videos.length" @click="toggleQuizForm">{{ showQuizForm ? 'Fechar criação' : 'Criar questionário' }}</button>
+            </header>
+            <form v-if="showQuizForm" class="surface mb-5 grid gap-5 p-5 sm:p-7" @submit.prevent="saveQuiz">
+              <div>
+                <h2 class="font-serif text-2xl">Novo questionário</h2>
+                <p class="mt-1 text-sm text-[#64756c]">O questionário será salvo como pendente e só ficará disponível aos usuários depois da aprovação.</p>
+              </div>
+              <label class="field-label">Debate
+                <select v-model="quizForm.videoId" class="field" required>
+                  <option value="" disabled>Selecione um debate</option>
+                  <option v-for="video in videos" :key="video.id" :value="video.id">{{ video.title }} · {{ label(video.status) }}</option>
+                </select>
+              </label>
+
+              <fieldset v-for="(question, questionIndex) in quizForm.questions" :key="questionIndex" class="grid gap-4 rounded-xl border border-[#e3e9e5] p-4 sm:p-5">
+                <legend class="px-2 font-semibold">Questão {{ questionIndex + 1 }}</legend>
+                <label class="field-label">Enunciado
+                  <textarea v-model="question.statement" class="field" rows="2" maxlength="1000" required></textarea>
+                </label>
+                <div class="grid gap-4 sm:grid-cols-2">
+                  <label class="field-label">Categoria<input v-model="question.category" class="field" maxlength="100" required /></label>
+                  <label class="field-label">Dificuldade
+                    <select v-model="question.difficulty" class="field" required>
+                      <option value="EASY">Fácil</option><option value="MEDIUM">Média</option><option value="HARD">Difícil</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="field-label">Explicação da resposta correta
+                  <textarea v-model="question.explanation" class="field" rows="2" maxlength="2000" required></textarea>
+                </label>
+                <div>
+                  <p class="field-label">Alternativas <span class="font-normal text-[#78877f]">Marque a correta</span></p>
+                  <div class="mt-2 grid gap-2">
+                    <div v-for="(option, optionIndex) in question.options" :key="optionIndex" class="flex items-center gap-3">
+                      <input v-model.number="question.correctOption" class="accent-[#235d46]" type="radio" :name="`correct-option-${questionIndex}`" :value="optionIndex" :aria-label="`Marcar alternativa ${optionIndex + 1} como correta`" required />
+                      <input v-model="question.options[optionIndex]" class="field" :aria-label="`Texto da alternativa ${optionIndex + 1}`" maxlength="500" :placeholder="`Alternativa ${optionIndex + 1}`" required />
+                      <button v-if="question.options.length > 2" class="secondary-button shrink-0 px-3" type="button" :aria-label="`Remover alternativa ${optionIndex + 1}`" @click="removeQuizOption(question, optionIndex)">Remover</button>
+                    </div>
+                  </div>
+                  <button v-if="question.options.length < 6" class="secondary-button mt-3 text-sm" type="button" @click="addQuizOption(question)">Adicionar alternativa</button>
+                </div>
+                <label class="field-label">Trecho de evidência
+                  <textarea v-model="question.evidenceExcerpt" class="field" rows="2" maxlength="2000" required></textarea>
+                </label>
+                <label class="field-label">Timestamp no vídeo (segundos) <span class="font-normal text-[#78877f]">Opcional</span>
+                  <input v-model="question.timestampSeconds" class="field max-w-xs" type="number" min="0" step="1" />
+                </label>
+                <button v-if="quizForm.questions.length > 1" class="secondary-button justify-self-start text-sm" type="button" @click="removeQuizQuestion(questionIndex)">Remover questão</button>
+              </fieldset>
+
+              <div class="flex flex-wrap gap-2">
+                <button class="secondary-button" type="button" :disabled="quizForm.questions.length >= 50" @click="addQuizQuestion">Adicionar questão</button>
+                <button class="primary-button" type="submit" :disabled="savingQuiz">{{ savingQuiz ? 'Salvando...' : 'Enviar para revisão' }}</button>
+                <button class="secondary-button" type="button" :disabled="savingQuiz" @click="toggleQuizForm">Cancelar</button>
+              </div>
+            </form>
             <label class="field-label mb-4 max-w-xs">Filtrar por estado
               <select v-model="quizFilter" class="field" @change="loadTab"><option value="PENDING_REVIEW">Em revisão</option><option value="APPROVED">Aprovados</option><option value="REJECTED">Reprovados</option><option value="DRAFT">Rascunhos</option><option value="">Todos</option></select>
             </label>
@@ -233,7 +359,7 @@ onMounted(loadTab);
                   <p class="mt-2 font-semibold">{{ question.statement }}</p>
                   <ul class="mt-3 grid gap-1 text-sm"><li v-for="option in question.options" :key="option.id" :class="option.isCorrect ? 'font-semibold text-[#27623e]' : 'text-[#64756c]'">{{ option.isCorrect ? '✓ ' : '○ ' }}{{ option.text }}</li></ul>
                   <p class="mt-3 text-sm text-[#64756c]">{{ question.explanation }}</p>
-                  <p class="mt-1 text-xs text-[#78877f]">Evidência: {{ question.evidenceExcerpt }}</p>
+                  <p class="mt-1 text-xs text-[#78877f]">Evidência: {{ question.evidenceExcerpt }}<span v-if="question.timestampSeconds != null"> · {{ question.timestampSeconds }}s</span></p>
                 </article>
               </div>
               <div v-if="selectedQuiz.status === 'PENDING_REVIEW'" class="mt-5 grid gap-3 border-t border-[#e8ede9] pt-5">

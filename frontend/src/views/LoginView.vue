@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { setSession } from '../lib/session';
+import AppHeader from '../components/AppHeader.vue';
 
 const props = defineProps({
   adminOnly: {
@@ -42,23 +43,18 @@ async function login() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
-      <a href="/" class="flex items-center gap-3 text-lg font-bold tracking-tight text-[#17241f]">
-        <span class="grid size-10 place-items-center rounded-xl bg-[#235d46] font-serif text-xl text-white">D</span>
-        <span>Debate<span class="font-normal text-[#668074]">.crítico</span></span>
-      </a>
-    </header>
-    <main class="mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl items-center gap-12 px-5 pb-12 md:grid-cols-[1fr_440px] md:px-8">
-      <section class="max-w-2xl py-8">
+  <div class="app-page">
+    <AppHeader area="public" />
+    <main class="app-auth-main">
+      <section class="app-auth-story">
         <p class="mb-5 text-xs font-bold tracking-[.2em] text-[#34745b]">{{ props.adminOnly ? 'ACESSO RESTRITO · ADMINISTRAÇÃO' : 'PENSAMENTO CRÍTICO · APRENDIZAGEM' }}</p>
         <h1 class="max-w-xl font-serif text-5xl leading-[1.08] tracking-tight text-[#17241f] md:text-6xl">{{ props.adminOnly ? 'Administre a plataforma com segurança.' : 'Debates melhores começam com uma análise melhor.' }}</h1>
-        <p class="mt-6 max-w-lg text-lg leading-8 text-[#64756c]">{{ props.adminOnly ? 'Entre com uma conta de administrador para gerenciar debates, aulas, usuários e avaliações.' : 'Aprenda a examinar argumentos, comparar evidências e formar suas próprias conclusões com mais clareza.' }}</p>
+        <p class="mt-6 max-w-lg text-lg leading-8 text-[#64756c]">{{ props.adminOnly ? 'Entre com uma conta de administrador para gerenciar debates, usuários e avaliações.' : 'Aprenda a examinar argumentos, comparar evidências e formar suas próprias conclusões com mais clareza.' }}</p>
         <div class="mt-8 h-0.5 w-14 bg-[#34745b]"></div>
         <p class="mt-5 max-w-md text-sm leading-6 text-[#78877f]">Uma plataforma educacional para ouvir com atenção, avaliar com critério e pensar por conta própria.</p>
       </section>
 
-      <section class="surface p-7 sm:p-9">
+      <section class="app-auth-card">
         <p class="text-xs font-bold tracking-[.18em] text-[#34745b]">{{ props.adminOnly ? 'PAINEL ADMINISTRATIVO' : 'BEM-VINDO DE VOLTA' }}</p>
         <h2 class="mt-3 font-serif text-3xl text-[#17241f]">{{ props.adminOnly ? 'Acesso de administrador' : 'Acesse sua conta' }}</h2>
         <p class="mt-2 text-sm text-[#64756c]">{{ props.adminOnly ? 'Use sua conta administrativa para entrar.' : 'Entre para continuar sua jornada de aprendizagem.' }}</p>

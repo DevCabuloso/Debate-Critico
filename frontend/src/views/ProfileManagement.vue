@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { clearSession, session } from '../lib/session';
+import AppHeader from '../components/AppHeader.vue';
 
 const router = useRouter();
 const profiles = ref([]);
@@ -164,22 +165,10 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="sticky top-0 z-10 border-b border-[#e3e9e5] bg-white/95 backdrop-blur">
-      <div class="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-3 md:px-8">
-        <RouterLink to="/admin" class="flex items-center gap-3 font-bold tracking-tight">
-          <span class="grid size-9 place-items-center rounded-xl bg-[#235d46] font-serif text-lg text-white">D</span>
-          <span>Debate<span class="font-normal text-[#668074]">.crítico</span><span class="ml-2 text-xs font-medium text-[#78877f]">/ administração</span></span>
-        </RouterLink>
-        <div class="flex items-center gap-2">
-          <span class="hidden text-sm text-[#52645a] md:inline">{{ session.user?.name }}</span>
-          <RouterLink to="/admin" class="secondary-button text-sm">Painel</RouterLink>
-          <button class="secondary-button text-sm" @click="logout">Sair</button>
-        </div>
-      </div>
-    </header>
+  <div class="app-page">
+    <AppHeader area="admin" :user-name="session.user?.name" @logout="logout" />
 
-    <main class="mx-auto max-w-[1200px] px-4 py-7 md:px-8 md:py-10">
+    <main class="app-content">
       <header class="mb-7">
         <p class="text-xs font-bold tracking-[.18em] text-[#34745b]">ADMINISTRAÇÃO</p>
         <h1 class="mt-2 font-serif text-4xl">Perfis</h1>

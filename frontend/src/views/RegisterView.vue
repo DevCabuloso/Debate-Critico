@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { api } from '../lib/api';
+import AppHeader from '../components/AppHeader.vue';
 
 const form = ref({
   name: '',
@@ -34,20 +35,15 @@ async function register() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f7f5]">
-    <header class="mx-auto flex max-w-7xl items-center px-5 py-5 md:px-8">
-      <RouterLink to="/" class="flex items-center gap-3 text-lg font-bold tracking-tight">
-        <span class="grid size-10 place-items-center rounded-xl bg-[#235d46] font-serif text-xl text-white">D</span>
-        <span>Debate<span class="font-normal text-[#668074]">.crítico</span></span>
-      </RouterLink>
-    </header>
-    <main class="mx-auto grid max-w-7xl items-center gap-10 px-5 pb-12 pt-5 md:grid-cols-[1fr_520px] md:px-8">
-      <section class="max-w-xl py-6">
+  <div class="app-page">
+    <AppHeader area="public" />
+    <main class="app-auth-main">
+      <section class="app-auth-story">
         <p class="mb-5 text-xs font-bold tracking-[.2em] text-[#34745b]">PENSAMENTO CRÍTICO · APRENDIZAGEM</p>
         <h1 class="font-serif text-5xl leading-tight tracking-tight">Comece sua jornada de aprendizagem.</h1>
-        <p class="mt-5 max-w-lg text-lg leading-8 text-[#64756c]">Crie sua conta para acompanhar debates, videoaulas e seu progresso.</p>
+        <p class="mt-5 max-w-lg text-lg leading-8 text-[#64756c]">Crie sua conta para acompanhar debates, explorar o minicurso e ver seu progresso.</p>
       </section>
-      <section class="surface p-7 sm:p-9">
+      <section class="app-auth-card">
         <p class="text-xs font-bold tracking-[.18em] text-[#34745b]">NOVO CADASTRO</p>
         <h2 class="mt-3 font-serif text-3xl">Crie sua conta</h2>
         <p class="mt-2 text-sm text-[#64756c]">Preencha seus dados para criar sua conta.</p>
