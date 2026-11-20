@@ -77,10 +77,10 @@ async function registerPlaybackEvent() {
   try {
     const { cycle: updated } = await api(`/cycles/${cycle.value.id}/video-events`, {
       method: 'POST',
-      body: { events: [{ type: 'PLAY', position: 0 }, { type: 'HEARTBEAT', position: 20 }] },
+      body: { events: [{ type: 'ENDED', position: 0 }] },
     });
     cycle.value = updated;
-    notice.value = 'Evento de visualização registrado.';
+    notice.value = 'Visualização concluída. Agora você pode iniciar o questionário.';
   } catch (requestError) {
     message(requestError.message);
   }
@@ -187,7 +187,11 @@ onMounted(loadDashboard);
                   <p class="font-semibold">{{ currentVideo?.title || 'Debate selecionado' }} · Ciclo {{ cycle.cycleNumber }}</p>
                   <p class="mt-1 text-sm text-[#64756c]">Etapa atual: {{ cycle.state }}</p>
                   <div class="mt-4 flex flex-wrap gap-2">
-                    <button class="secondary-button text-sm" @click="registerPlaybackEvent">Registrar visualização</button>
+                    <button v-if="cycle.state === 'INITIAL_VIDEO' || cycle.state === 'FINAL_VIDEO'"
+                      class="secondary-button text-sm"
+                      @click="registerPlaybackEvent">
+                      Concluir vídeo e ir ao questionário
+                    </button>
                     <button class="secondary-button text-sm" @click="refreshCycle">Atualizar etapa</button>
                     <button v-if="cycle.state.endsWith('_QUIZ')" class="primary-button text-sm" @click="beginAttempt">
                       Iniciar avaliação {{ cycle.state.startsWith('FINAL_') ? 'final' : 'inicial' }}

@@ -361,7 +361,33 @@ app.post('/api/v1/cycles/:id/video-events', ensureAuth, asyncRoute(async (req, r
 
   const { error: insertError } = await supabase.from('video_watch_events').insert(rows);
   if (insertError) return handleDatabaseError(res, insertError);
-  res.json({ ok: true, received: rows.length, cycle: toCycle(cycle) });
+
+  let updatedCycle = cycle;
+  if (rows.some((event) => event.event_type === 'ENDED')) {
+    const nextState = cycle.state === 'INITIAL_VIDEO'
+      ? 'INITIAL_QUIZ'
+      : cycle.state === 'FINAL_VIDEO'
+        ? 'FINAL_QUIZ'
+        : cycle.state;
+
+    if (nextState !== cycle.state) {
+      const { data, error } = await supabase
+        .from('user_cycles')
+        .update({
+          state: nextState,
+          state_updated_at: new Date().toISOString(),
+        })
+        .eq('id', cycle.id)
+        .eq('user_id', req.user.id)
+        .eq('state', cycle.state)
+        .select('*')
+        .maybeSingle();
+      if (error) return handleDatabaseError(res, error);
+      if (data) updatedCycle = data;
+    }
+  }
+
+  res.json({ ok: true, received: rows.length, cycle: toCycle(updatedCycle) });
 }));
 
 app.get('/api/v1/cycles/:id/video-progress', ensureAuth, asyncRoute(async (req, res) => {
